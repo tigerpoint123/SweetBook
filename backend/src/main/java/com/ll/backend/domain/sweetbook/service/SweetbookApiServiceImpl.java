@@ -1,10 +1,10 @@
 package com.ll.backend.domain.sweetbook.service;
 
 import com.ll.backend.global.client.SweetbookApiClient;
+import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
-import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,12 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
     }
 
     @Override
-    public SweetbookApiEnvelope<PhotoUploadData> uploadPhotos(String bookUid, List<MultipartFile> files) {
-        return sweetbookApiClient.uploadPhotos(bookUid, files);
+    public SweetbookApiEnvelope<BookPhotosData> getBookPhotos(String bookUid) {
+        return sweetbookApiClient.getBookPhotos(bookUid);
+    }
+
+    @Override
+    public SweetbookApiEnvelope<PhotoUploadData> uploadPhoto(String bookUid, MultipartFile file) {
+        return sweetbookApiClient.uploadPhoto(bookUid, file);
     }
 }

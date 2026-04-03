@@ -1,13 +1,14 @@
 package com.ll.backend.domain.sweetbook.controller;
 
 import com.ll.backend.domain.sweetbook.service.SweetbookApiService;
+import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +22,8 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/api/sweetbook")
 @RequiredArgsConstructor
-public class SweetbookApiController {
+@Slf4j
+public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 내가 직접 db에 url 저장해서 볼 수 있도록 해야한다.
 
     private final SweetbookApiService sweetbookApiService;
 
@@ -37,15 +39,32 @@ public class SweetbookApiController {
         return sweetbookApiService.createBook(body);
     }
 
+    /**
+     * 프록시: Sweetbook {@code GET /v1/books/{bookUid}/photos}.
+     */
+    @GetMapping(value = "/books/{bookUid}/photos", produces = MediaType.APPLICATION_JSON_VALUE)
+    public SweetbookApiEnvelope<BookPhotosData> getBookPhotos(@PathVariable String bookUid) {
+        return sweetbookApiService.getBookPhotos(bookUid);
+    }
+
+    /**
+     * 프록시: Sweetbook {@code POST /v1/books/{bookUid}/photos} (단일 파일, part name {@code file}).
+     */
     @PostMapping(
             value = "/books/{bookUid}/photos",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public SweetbookApiEnvelope<PhotoUploadData> uploadPhotos(
+    public SweetbookApiEnvelope<PhotoUploadData> uploadPhoto(
             @PathVariable String bookUid,
-            @RequestParam("files") List<MultipartFile> files
+            @RequestParam("file") MultipartFile file
     ) {
-        return sweetbookApiService.uploadPhotos(bookUid, files);
+        log.info(
+                "uploadPhoto 수신 bookUid={}, originalFilename={}, size={}, empty={}",
+                bookUid,
+                file != null ? file.getOriginalFilename() : null,
+                file != null ? file.getSize() : 0,
+                file == null || file.isEmpty());
+        return sweetbookApiService.uploadPhoto(bookUid, file);
     }
 }
