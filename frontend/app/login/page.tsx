@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { setLoggedIn } from "@/lib/auth-storage";
 import { memberApi, postMemberForm } from "@/lib/member-api";
 
 export default function LoginPage() {
@@ -30,6 +31,7 @@ export default function LoginPage() {
       } catch {
         if (text.trim()) successMsg = text;
       }
+      setLoggedIn();
       window.alert(successMsg);
       router.push("/");
     } catch {

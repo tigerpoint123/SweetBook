@@ -3,6 +3,7 @@ package com.ll.backend.domain.member.service;
 import com.ll.backend.domain.member.entity.Member;
 import com.ll.backend.domain.member.repository.MemberRepository;
 import com.ll.backend.domain.member.vo.MemberLoginResult;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,14 @@ public class MemberServiceImpl implements MemberService {
         String sessionId = UUID.randomUUID().toString();
         sessionIdToUsername.put(sessionId, username);
         return sessionId;
+    }
+
+    @Override
+    public Optional<String> resolveUsernameBySessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(sessionIdToUsername.get(sessionId));
     }
 
     @Override

@@ -1,12 +1,15 @@
 package com.ll.backend.domain.member.service;
 
 import com.ll.backend.domain.member.entity.Member;
+import java.util.Optional;
 import com.ll.backend.domain.member.vo.MemberLoginResult;
 import jakarta.validation.constraints.NotBlank;
 
 public interface MemberService {
 
     MemberLoginResult login(String username, String password);
+
+    Optional<String> resolveUsernameBySessionId(String sessionId);
 
     Member getMemberInfo();
 

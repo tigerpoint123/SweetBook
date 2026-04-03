@@ -1,6 +1,7 @@
 package com.ll.backend.domain.sweetbook.service;
 
 import com.ll.backend.global.client.SweetbookApiClient;
+import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
 import java.util.List;
@@ -18,6 +19,11 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
     @Override
     public Map<String, Object> getBooks() {
         return sweetbookApiClient.getBooks();
+    }
+
+    @Override
+    public Map<String, Object> createBook(CreateBookRequest request) {
+        return sweetbookApiClient.createBook(request);
     }
 
     @Override

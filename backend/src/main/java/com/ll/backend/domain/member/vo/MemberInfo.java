@@ -1,4 +1,4 @@
 package com.ll.backend.domain.member.vo;
 
-public record MemberInfo() {
+public record MemberInfo(String username) {
 }

@@ -1,9 +1,9 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+import { API_BASE } from "@/lib/api-config";
 
 export const memberApi = {
   login: `${API_BASE}/api/member/login`,
   register: `${API_BASE}/api/member/member`,
+  me: `${API_BASE}/api/member/member`,
 } as const;
 
 export async function postMemberForm(
@@ -17,5 +17,12 @@ export async function postMemberForm(
     credentials: "include",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+  });
+}
+
+export async function fetchMyMemberInfo(): Promise<Response> {
+  return fetch(memberApi.me, {
+    method: "GET",
+    credentials: "include",
   });
 }

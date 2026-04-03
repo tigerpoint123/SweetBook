@@ -1,9 +1,17 @@
 package com.ll.backend.global.client.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import java.util.List;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.time.Instant;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PhotoUploadData(
-        List<UploadedPhotoInfo> photos
+        String fileName,
+        String originalName,
+        long size,
+        String mimeType,
+        Instant uploadedAt,
+        @JsonProperty("isDuplicate")
+        boolean isDuplicate,
+        String hash
 ) {}

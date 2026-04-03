@@ -7,11 +7,13 @@ import com.ll.backend.domain.member.vo.MemberInfo;
 import com.ll.backend.domain.member.vo.MemberLoginResult;
 import jakarta.validation.constraints.NotBlank;
 import java.time.Duration;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -48,10 +50,17 @@ public class MemberController {
     }
 
     @GetMapping("/member")
-    public ResponseEntity<MemberInfo> getInfo() {
-        Member member = memberService.getMemberInfo();
+    public ResponseEntity<MemberInfo> getInfo(
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId
+    ) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-        return null;
+        Optional<String> usernameOpt = memberService.resolveUsernameBySessionId(sessionId);
+        return usernameOpt
+                .map(username -> ResponseEntity.ok(new MemberInfo(username)))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
     }
 
     @PostMapping("/member")
@@ -61,7 +70,7 @@ public class MemberController {
     ) {
         memberService.postMember(username, password);
 
-        return ResponseEntity.ok(new MemberInfo());
+        return ResponseEntity.ok(new MemberInfo(username));
     }
 
 }
