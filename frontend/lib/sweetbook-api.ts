@@ -1,3 +1,4 @@
+import axios, { type AxiosResponse } from "axios";
 import { API_BASE } from "@/lib/api-config";
 
 export const sweetbookBooksUrl = `${API_BASE}/api/sweetbook/books`;
@@ -5,6 +6,30 @@ export const sweetbookBooksUrl = `${API_BASE}/api/sweetbook/books`;
 export function sweetbookPhotoUploadUrl(bookUid: string): string {
   return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/photos`;
 }
+
+/** GET /v1/books/{bookUid}/photos 프록시 */
+export function sweetbookBookPhotosUrl(bookUid: string): string {
+  return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/photos`;
+}
+
+export type BookPhotoItem = {
+  fileName: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+  uploadedAt: string;
+  hash: string;
+};
+
+export type BookPhotosData = {
+  photos: BookPhotoItem[];
+  totalCount: number;
+};
+
+export type BookPhotosEnvelope = {
+  success: boolean;
+  data: BookPhotosData;
+};
 
 export interface CreateBookPayload {
   title: string;
@@ -29,18 +54,21 @@ export async function fetchSweetbookBooks(): Promise<Response> {
   });
 }
 
-export async function uploadPhotos(
-  bookUid: string,
-  files: FileList | File[]
-): Promise<Response> {
-  const formData = new FormData();
-  const list = Array.from(files);
-  for (const file of list) {
-    formData.append("files", file);
-  }
-  return fetch(sweetbookPhotoUploadUrl(bookUid), {
-    method: "POST",
+export async function fetchBookPhotos(bookUid: string): Promise<Response> {
+  return fetch(sweetbookBookPhotosUrl(bookUid), {
+    method: "GET",
     credentials: "include",
-    body: formData,
+  });
+}
+
+/** 단일 이미지 — multipart 필드명 `file` (Sweetbook `/v1/books/{bookUid}/photos` 와 동일) */
+export async function uploadPhoto(
+  bookUid: string,
+  file: File
+): Promise<AxiosResponse<unknown>> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return axios.post<unknown>(sweetbookPhotoUploadUrl(bookUid), formData, {
+    withCredentials: true,
   });
 }
