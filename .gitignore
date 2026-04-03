@@ -1,0 +1,28 @@
+.vscode/
+.idea/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Java build outputs
+.gradle/
+build/
+target/
+*.class
+
+# Node / Next.js outputs
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
