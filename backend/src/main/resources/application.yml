@@ -28,3 +28,12 @@ sweetbook:
   api:
     base-url: ${SWEETBOOK_API_BASE_URL:https://api-sandbox.sweetbook.com/v1}
     key: ${SWEETBOOK_API_KEY}
+  # POST .../contents 는 multipart/form-data. parameters JSON 에 monthYearLabel·photos(배열) 등 템플릿 필수 항목 포함.
+  contents:
+    template-uid: ${SWEETBOOK_CONTENTS_TEMPLATE_UID:1vuzMfUnCkXS}
+    break-before: ${SWEETBOOK_CONTENTS_BREAK_BEFORE:page}
+
+# 업로드 이미지 로컬 저장 (프로젝트 기준 상대 경로)
+app:
+  photo:
+    upload-dir: uploads/photos

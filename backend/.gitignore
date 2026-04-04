@@ -36,3 +36,9 @@ out/
 ### VS Code ###
 .vscode/
 .env
+
+### Local uploaded photos (upload-dir) ###
+uploads/
+
+### H2 file DB (application.yml: jdbc:h2:file:./data/testdb) ###
+data/

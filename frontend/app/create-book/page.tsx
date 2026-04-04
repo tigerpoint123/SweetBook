@@ -54,10 +54,11 @@ export default function CreateBookPage() {
         return;
       }
       setMessage(
-        text
-          ? `생성 응답: ${text}`
-          : "책이 생성되었습니다. 응답 본문에 북 UID가 있으면 업로드 페이지에 입력하세요."
+        "책이 성공적으로 생성되었습니다. 잠시 후 메인 페이지로 이동합니다."
       );
+      window.setTimeout(() => {
+        router.replace("/");
+      }, 2000);
     } catch {
       setMessage("서버에 연결할 수 없습니다.");
     } finally {
@@ -71,12 +72,20 @@ export default function CreateBookPage() {
         <Link href="/" className="text-sm hover:underline">
           ← 홈
         </Link>
-        <Link
-          href="/upload"
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          업로드
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/my-books"
+            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
+          >
+            책 관리
+          </Link>
+          <Link
+            href="/upload"
+            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            업로드
+          </Link>
+        </div>
       </header>
 
       <main className="mx-auto max-w-md px-4 py-10">

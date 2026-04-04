@@ -26,3 +26,9 @@ coverage/
 .env.*
 !.env.example
 
+# Local uploaded photos
+uploads/
+
+# Backend H2 test DB (jdbc:h2:file:./data/testdb)
+backend/data/
+

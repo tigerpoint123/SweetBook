@@ -46,6 +46,13 @@ public class MemberServiceImpl implements MemberService {
     }
 
     @Override
+    public Optional<Long> resolveMemberIdBySessionId(String sessionId) {
+        return resolveUsernameBySessionId(sessionId)
+                .flatMap(memberRepository::findByUsername)
+                .map(Member::getId);
+    }
+
+    @Override
     public Member getMemberInfo() {
         return null;
     }
