@@ -31,10 +31,19 @@ public class SweetbookBook {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** Sweetbook 편집 최종화 시각. null 이면 편집 가능으로 간주 */
+    @Column(name = "finalized_at")
+    private Instant finalizedAt;
+
     @Builder
-    public SweetbookBook(Long memberId, String bookUid, Instant createdAt) {
+    public SweetbookBook(Long memberId, String bookUid, Instant createdAt, Instant finalizedAt) {
         this.memberId = memberId;
         this.bookUid = bookUid;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
+        this.finalizedAt = finalizedAt;
+    }
+
+    public void markFinalized(Instant at) {
+        this.finalizedAt = at != null ? at : Instant.now();
     }
 }

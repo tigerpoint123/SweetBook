@@ -41,4 +41,10 @@ public interface SweetbookApiService {
     Map<String, Object> addBookContents(String bookUid, AddBookContentsRequest request, Long memberId);
 
     Map<String, Object> deleteBook(String bookUid, Long memberId);
+
+    /** Sweetbook DELETE /v1/books/{bookUid}/photos/{fileName} — 북 소유자만, 로컬 DB에 동일 fileName 행이 있을 때 */
+    Map<String, Object> deleteBookPhoto(String bookUid, String fileName, Long memberId);
+
+    /** Sweetbook POST /v1/books/{bookUid}/finalization — 북 소유자만 */
+    Map<String, Object> finalizeBook(String bookUid, Long memberId);
 }

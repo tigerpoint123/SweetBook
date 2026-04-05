@@ -28,7 +28,7 @@ sweetbook:
   api:
     base-url: ${SWEETBOOK_API_BASE_URL:https://api-sandbox.sweetbook.com/v1}
     key: ${SWEETBOOK_API_KEY}
-  # POST .../contents 는 multipart/form-data. parameters JSON 에 monthYearLabel·photos(배열) 등 템플릿 필수 항목 포함.
+  # POST .../contents 는 multipart/form-data. 템플릿 1vuzMfUnCkXS: parameters JSON 에 monthYearLabel·photos(배열).
   contents:
     template-uid: ${SWEETBOOK_CONTENTS_TEMPLATE_UID:1vuzMfUnCkXS}
     break-before: ${SWEETBOOK_CONTENTS_BREAK_BEFORE:page}

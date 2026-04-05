@@ -32,6 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/sweetbook")
@@ -43,6 +44,7 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
 
     private final SweetbookApiService sweetbookApiService;
     private final MemberService memberService;
+    private final ObjectMapper objectMapper;
 
     @GetMapping(value = "/books", produces = MediaType.APPLICATION_JSON_VALUE)
     public SweetbookApiEnvelope<BooksListData> listBooks(
@@ -116,9 +118,6 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
         return sweetbookApiService.getBookPhotos(bookUid);
     }
 
-    /**
-     * Sweetbook POST /v1/books/{bookUid}/contents 프록시 (JSON). 세션 사용자가 해당 북 생성자일 때만 허용.
-     */
     @PostMapping(
             value = "/books/{bookUid}/contents",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -138,9 +137,70 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
         try {
             Map<String, Object> result =
                     sweetbookApiService.addBookContents(bookUid, body, memberIdOpt.get());
+            try {
+                log.info(
+                        "addBookContents 백엔드→클라이언트 응답 bookUid={}, body={}",
+                        bookUid,
+                        objectMapper.writeValueAsString(result));
+            } catch (Exception logEx) {
+                log.info(
+                        "addBookContents 백엔드→클라이언트 응답 bookUid={}, body={}",
+                        bookUid,
+                        result);
+            }
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
+            log.warn(
+                    "addBookContents Sweetbook 오류 bookUid={}, status={}, 서버응답body={}",
+                    bookUid,
+                    e.getStatusCode().value(),
+                    responseBody != null ? responseBody : "");
+            if (responseBody == null || responseBody.isBlank()) {
+                return ResponseEntity.status(e.getStatusCode()).build();
+            }
+            return ResponseEntity.status(e.getStatusCode())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(responseBody);
+        }
+    }
+
+    @PostMapping(
+            value = "/books/{bookUid}/finalization",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<?> finalizeBook(
+            @PathVariable String bookUid,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        if (memberIdOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        try {
+            Map<String, Object> result =
+                    sweetbookApiService.finalizeBook(bookUid, memberIdOpt.get());
+            try {
+                log.info(
+                        "finalizeBook 백엔드→클라이언트 응답 bookUid={}, body={}",
+                        bookUid,
+                        objectMapper.writeValueAsString(result));
+            } catch (Exception logEx) {
+                log.info(
+                        "finalizeBook 백엔드→클라이언트 응답 bookUid={}, body={}",
+                        bookUid,
+                        result);
+            }
+            return ResponseEntity.ok(result);
+        } catch (WebClientResponseException e) {
+            String responseBody = e.getResponseBodyAsString();
+            log.warn(
+                    "finalizeBook Sweetbook 오류 bookUid={}, status={}, 서버응답body={}",
+                    bookUid,
+                    e.getStatusCode().value(),
+                    responseBody != null ? responseBody : "");
             if (responseBody == null || responseBody.isBlank()) {
                 return ResponseEntity.status(e.getStatusCode()).build();
             }
@@ -166,6 +226,33 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
                 file != null ? file.getSize() : 0,
                 file == null || file.isEmpty());
         return sweetbookApiService.uploadPhoto(bookUid, file);
+    }
+
+    @DeleteMapping(value = "/books/{bookUid}/photos/{fileName}", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> deleteBookPhoto(
+            @PathVariable String bookUid,
+            @PathVariable String fileName,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        if (memberIdOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        try {
+            Map<String, Object> result =
+                    sweetbookApiService.deleteBookPhoto(bookUid, fileName, memberIdOpt.get());
+            return ResponseEntity.ok(result);
+        } catch (WebClientResponseException e) {
+            String responseBody = e.getResponseBodyAsString();
+            if (responseBody == null || responseBody.isBlank()) {
+                return ResponseEntity.status(e.getStatusCode()).build();
+            }
+            return ResponseEntity.status(e.getStatusCode())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(responseBody);
+        }
     }
 
     /**

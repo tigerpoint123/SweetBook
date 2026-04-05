@@ -13,11 +13,16 @@ import {
 } from "@/lib/photo-api";
 import { BookPageFlip } from "@/components/BookPageFlip";
 import {
+  deleteBookPhoto,
   fetchBookGallery,
   fetchMyBookEntries,
   postBookContents,
+  postBookFinalization,
+  resolveFinalizeFailureMessage,
+  SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID,
   uploadBookCover,
   type AddBookContentsResponse,
+  type FinalizeBookResponse,
   type MyBookEntry,
   type UploadBookCoverResponse,
 } from "@/lib/sweetbook-api";
@@ -37,12 +42,22 @@ export default function BookGalleryPage() {
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<number[]>([]);
   const [photoCompletePending, setPhotoCompletePending] = useState(false);
   const [photoSelectMessage, setPhotoSelectMessage] = useState<string | null>(null);
+  const [photoDeleteMode, setPhotoDeleteMode] = useState(false);
+  const [selectedDeletePhotoIds, setSelectedDeletePhotoIds] = useState<number[]>([]);
+  const [photoDeletePending, setPhotoDeletePending] = useState(false);
+  const [photoDeleteMessage, setPhotoDeleteMessage] = useState<string | null>(null);
   const [coverSelectMode, setCoverSelectMode] = useState(false);
   const [selectedCoverPhotoId, setSelectedCoverPhotoId] = useState<number | null>(null);
   const [coverSavePending, setCoverSavePending] = useState(false);
   const [coverMessage, setCoverMessage] = useState<string | null>(null);
-  /** 로그인 사용자가 이 페이지의 북을(백엔드 기록 기준) 생성한 경우에만 사진 선택 등 표시 */
+  /** 로그인 사용자가 이 북 생성자인지(백엔드 sweetbook_book) */
   const [isOwnerOfThisBook, setIsOwnerOfThisBook] = useState(false);
+  /** 최종화되어 편집 UI(채택·삭제·표지) 비활성 */
+  const [bookFinalized, setBookFinalized] = useState(false);
+  const [finalizedBannerMessage, setFinalizedBannerMessage] = useState<string | null>(null);
+  /** 최종화 실패(예: 최소 페이지 미달) 시 경고 스타일 */
+  const [finalizeBannerIsError, setFinalizeBannerIsError] = useState(false);
+  const [finalizePending, setFinalizePending] = useState(false);
 
   useEffect(() => {
     setLoggedIn(readLoggedIn());
@@ -51,6 +66,9 @@ export default function BookGalleryPage() {
   useEffect(() => {
     if (!loggedIn || !bookUid.trim()) {
       setIsOwnerOfThisBook(false);
+      setBookFinalized(false);
+      setFinalizedBannerMessage(null);
+      setFinalizeBannerIsError(false);
       return;
     }
     let cancelled = false;
@@ -58,16 +76,35 @@ export default function BookGalleryPage() {
       if (cancelled) return;
       if (res.status === 401 || !res.ok) {
         setIsOwnerOfThisBook(false);
+        setBookFinalized(false);
+        setFinalizedBannerMessage(null);
+        setFinalizeBannerIsError(false);
         return;
       }
       try {
         const entries = (await res.json()) as MyBookEntry[];
         const uid = bookUid.trim();
-        const owns =
-          Array.isArray(entries) && entries.some((e) => e.bookUid === uid);
-        if (!cancelled) setIsOwnerOfThisBook(owns);
+        const entry =
+          Array.isArray(entries) ? entries.find((e) => e.bookUid === uid) : undefined;
+        const owns = !!entry;
+        if (cancelled) return;
+        setIsOwnerOfThisBook(owns);
+        const fin = entry?.finalized === true;
+        setBookFinalized(fin);
+        if (owns && fin) {
+          setFinalizedBannerMessage("이미 최종화된 책입니다");
+          setFinalizeBannerIsError(false);
+        } else {
+          setFinalizedBannerMessage(null);
+          setFinalizeBannerIsError(false);
+        }
       } catch {
-        if (!cancelled) setIsOwnerOfThisBook(false);
+        if (!cancelled) {
+          setIsOwnerOfThisBook(false);
+          setBookFinalized(false);
+          setFinalizedBannerMessage(null);
+          setFinalizeBannerIsError(false);
+        }
       }
     });
     return () => {
@@ -76,15 +113,18 @@ export default function BookGalleryPage() {
   }, [bookUid, loggedIn]);
 
   useEffect(() => {
-    if (!isOwnerOfThisBook) {
+    if (!isOwnerOfThisBook || bookFinalized) {
       setPhotoSelectMode(false);
       setSelectedPhotoIds([]);
       setPhotoSelectMessage(null);
+      setPhotoDeleteMode(false);
+      setSelectedDeletePhotoIds([]);
+      setPhotoDeleteMessage(null);
       setCoverSelectMode(false);
       setSelectedCoverPhotoId(null);
       setCoverMessage(null);
     }
-  }, [isOwnerOfThisBook]);
+  }, [isOwnerOfThisBook, bookFinalized]);
 
   useEffect(() => {
     if (!bookUid) {
@@ -154,9 +194,12 @@ export default function BookGalleryPage() {
 
   function togglePhotoSelectMode() {
     setPhotoSelectMessage(null);
+    setPhotoDeleteMessage(null);
     setCoverMessage(null);
     setCoverSelectMode(false);
     setSelectedCoverPhotoId(null);
+    setPhotoDeleteMode(false);
+    setSelectedDeletePhotoIds([]);
     setPhotoSelectMode((m) => {
       const next = !m;
       if (!next) setSelectedPhotoIds([]);
@@ -164,11 +207,29 @@ export default function BookGalleryPage() {
     });
   }
 
+  function togglePhotoDeleteMode() {
+    setPhotoDeleteMessage(null);
+    setPhotoSelectMessage(null);
+    setCoverMessage(null);
+    setCoverSelectMode(false);
+    setSelectedCoverPhotoId(null);
+    setPhotoSelectMode(false);
+    setSelectedPhotoIds([]);
+    setPhotoDeleteMode((m) => {
+      const next = !m;
+      if (!next) setSelectedDeletePhotoIds([]);
+      return next;
+    });
+  }
+
   function toggleCoverSelectMode() {
     setCoverMessage(null);
     setPhotoSelectMessage(null);
+    setPhotoDeleteMessage(null);
     setPhotoSelectMode(false);
     setSelectedPhotoIds([]);
+    setPhotoDeleteMode(false);
+    setSelectedDeletePhotoIds([]);
     setCoverSelectMode((m) => {
       const next = !m;
       if (!next) setSelectedCoverPhotoId(null);
@@ -179,7 +240,7 @@ export default function BookGalleryPage() {
   async function handlePhotoSelectComplete() {
     setPhotoSelectMessage(null);
     if (selectedPhotoIds.length === 0) {
-      setPhotoSelectMessage("북에 넣을 사진을 하나 이상 선택하세요.");
+      setPhotoSelectMessage("채택할 사진을 하나 이상 선택하세요.");
       return;
     }
     const uid = bookUid.trim();
@@ -187,21 +248,32 @@ export default function BookGalleryPage() {
       setPhotoSelectMessage("북 UID를 확인할 수 없습니다.");
       return;
     }
-    const rowPhotos: string[] = [];
-    for (const id of selectedPhotoIds) {
-      const photo = localPhotos.find((p) => p.id === id);
-      const name = photo?.sweetbookFileName?.trim();
-      if (!name) {
-        setPhotoSelectMessage(
-          "선택한 사진 중 Sweetbook 파일명이 없는 항목이 있습니다. 업로드된 사진만 추가할 수 있습니다."
-        );
-        return;
-      }
-      rowPhotos.push("$upload", name);
-    }
     setPhotoCompletePending(true);
     try {
-      const res = await postBookContents(uid, { rowPhotos });
+      const photos: string[] = [];
+      for (const id of selectedPhotoIds) {
+        const photo = localPhotos.find((p) => p.id === id);
+        const name = photo?.sweetbookFileName?.trim();
+        if (!name) {
+          setPhotoSelectMessage(
+            "Sweetbook 파일명이 없는 사진이 있습니다. 먼저 업로드 페이지에서 이 북으로 사진을 올린 뒤 다시 선택하세요."
+          );
+          return;
+        }
+        photos.push(name);
+      }
+
+      const monthYearLabel = new Date()
+        .toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
+        .slice(0, 7);
+
+      const res = await postBookContents(uid, {
+        templateUid: SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID,
+        parameters: {
+          monthYearLabel,
+          photos,
+        },
+      });
       const text = await res.text();
       if (!res.ok) {
         let detail = text || `요청 실패 (${res.status})`;
@@ -231,6 +303,67 @@ export default function BookGalleryPage() {
       setPhotoSelectMessage("네트워크 오류로 콘텐츠를 추가할 수 없습니다.");
     } finally {
       setPhotoCompletePending(false);
+    }
+  }
+
+  async function reloadLocalPhotosForBook() {
+    const uid = bookUid.trim();
+    if (!uid) return;
+    const lRes = await fetchLocalPhotos(uid);
+    const lText = await lRes.text();
+    if (lRes.ok) {
+      try {
+        setLocalPhotos(JSON.parse(lText) as LocalPhotoItem[]);
+      } catch {
+        setLocalLoadError("로컬 사진 목록을 해석할 수 없습니다.");
+      }
+    }
+  }
+
+  async function handlePhotoDeleteComplete() {
+    setPhotoDeleteMessage(null);
+    if (selectedDeletePhotoIds.length === 0) {
+      setPhotoDeleteMessage("삭제할 사진을 하나 이상 선택하세요.");
+      return;
+    }
+    const uid = bookUid.trim();
+    if (!uid) {
+      setPhotoDeleteMessage("북 UID를 확인할 수 없습니다.");
+      return;
+    }
+    setPhotoDeletePending(true);
+    try {
+      for (const id of selectedDeletePhotoIds) {
+        const photo = localPhotos.find((p) => p.id === id);
+        const name = photo?.sweetbookFileName?.trim();
+        if (!name) {
+          setPhotoDeleteMessage(
+            "Sweetbook 파일명이 없는 사진이 있습니다. 업로드된 사진만 삭제할 수 있습니다."
+          );
+          return;
+        }
+        const res = await deleteBookPhoto(uid, name);
+        const text = await res.text();
+        if (!res.ok) {
+          let detail = text || `삭제 실패 (${res.status})`;
+          try {
+            const j = JSON.parse(text) as { message?: string };
+            if (j?.message) detail = j.message;
+          } catch {
+            /* keep */
+          }
+          setPhotoDeleteMessage(detail);
+          return;
+        }
+      }
+      setPhotoDeleteMessage("선택한 사진을 삭제했습니다.");
+      setPhotoDeleteMode(false);
+      setSelectedDeletePhotoIds([]);
+      await reloadLocalPhotosForBook();
+    } catch {
+      setPhotoDeleteMessage("네트워크 오류로 삭제할 수 없습니다.");
+    } finally {
+      setPhotoDeletePending(false);
     }
   }
 
@@ -315,8 +448,50 @@ export default function BookGalleryPage() {
     router.refresh();
   }
 
-  const effectiveCoverSelectMode = isOwnerOfThisBook && coverSelectMode;
-  const effectivePhotoSelectMode = isOwnerOfThisBook && photoSelectMode;
+  const ownerMayEditPhotos = isOwnerOfThisBook && !bookFinalized;
+
+  async function handleFinalizeBook() {
+    const uid = bookUid.trim();
+    if (!uid) return;
+    setFinalizePending(true);
+    setFinalizeBannerIsError(false);
+    try {
+      const res = await postBookFinalization(uid);
+      const text = await res.text();
+      let j: FinalizeBookResponse = {};
+      try {
+        j = text ? (JSON.parse(text) as FinalizeBookResponse) : {};
+      } catch {
+        /* keep */
+      }
+      if (!res.ok) {
+        setFinalizeBannerIsError(true);
+        setFinalizedBannerMessage(resolveFinalizeFailureMessage(j, text));
+        return;
+      }
+      if (j.success !== true) {
+        setFinalizeBannerIsError(true);
+        setFinalizedBannerMessage(resolveFinalizeFailureMessage(j, text));
+        return;
+      }
+      setFinalizeBannerIsError(false);
+      setFinalizedBannerMessage(
+        typeof j.message === "string" && j.message.trim() !== ""
+          ? j.message
+          : "책 최종화 완료"
+      );
+      setBookFinalized(true);
+    } catch {
+      setFinalizeBannerIsError(true);
+      setFinalizedBannerMessage("네트워크 오류로 최종화할 수 없습니다.");
+    } finally {
+      setFinalizePending(false);
+    }
+  }
+
+  const effectiveCoverSelectMode = ownerMayEditPhotos && coverSelectMode;
+  const effectivePhotoSelectMode = ownerMayEditPhotos && photoSelectMode;
+  const effectivePhotoDeleteMode = ownerMayEditPhotos && photoDeleteMode;
 
   return (
     <div className="min-h-screen">
@@ -387,6 +562,17 @@ export default function BookGalleryPage() {
         {localLoadError && !error ? (
           <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">{localLoadError}</p>
         ) : null}
+        {isOwnerOfThisBook && finalizedBannerMessage ? (
+          <p
+            className={
+              finalizeBannerIsError
+                ? "mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                : "mb-4 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200"
+            }
+          >
+            {finalizedBannerMessage}
+          </p>
+        ) : null}
 
         {!loading && !error && hasLocal ? (
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[8fr_2fr] lg:items-start lg:gap-6">
@@ -404,8 +590,16 @@ export default function BookGalleryPage() {
                   업로드 사진 (클릭 시 이 기기에 저장)
                 </h2>
                 <div className="flex flex-wrap items-center gap-3">
-                  {isOwnerOfThisBook ? (
+                  {ownerMayEditPhotos ? (
                     <>
+                      <button
+                        type="button"
+                        disabled={finalizePending}
+                        onClick={() => void handleFinalizeBook()}
+                        className="rounded-md border border-emerald-700 bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-800 disabled:opacity-50 dark:border-emerald-600 dark:bg-emerald-800 dark:hover:bg-emerald-700"
+                      >
+                        {finalizePending ? "처리 중…" : "편집 마치기"}
+                      </button>
                       <button
                         type="button"
                         aria-pressed={photoSelectMode}
@@ -416,7 +610,7 @@ export default function BookGalleryPage() {
                             : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
                         }`}
                       >
-                        사진 선택
+                        사진 채택
                       </button>
                       {photoSelectMode ? (
                         <button
@@ -426,6 +620,28 @@ export default function BookGalleryPage() {
                           className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                         >
                           {photoCompletePending ? "저장 중…" : "선택 완료"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        aria-pressed={photoDeleteMode}
+                        onClick={togglePhotoDeleteMode}
+                        className={`rounded-md border px-2.5 py-1 text-xs font-medium dark:border-zinc-600 ${
+                          photoDeleteMode
+                            ? "border-red-800 bg-red-800 text-white dark:border-red-700 dark:bg-red-900"
+                            : "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                        }`}
+                      >
+                        삭제
+                      </button>
+                      {photoDeleteMode ? (
+                        <button
+                          type="button"
+                          disabled={photoDeletePending}
+                          onClick={() => void handlePhotoDeleteComplete()}
+                          className="rounded-md bg-red-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-900 disabled:opacity-50 dark:bg-red-900 dark:hover:bg-red-800"
+                        >
+                          {photoDeletePending ? "삭제 중…" : "선택 완료"}
                         </button>
                       ) : null}
                       <button
@@ -453,10 +669,13 @@ export default function BookGalleryPage() {
                     </>
                   ) : null}
                 </div>
-                {isOwnerOfThisBook && photoSelectMessage ? (
+                {ownerMayEditPhotos && photoSelectMessage ? (
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">{photoSelectMessage}</p>
                 ) : null}
-                {isOwnerOfThisBook && coverMessage ? (
+                {ownerMayEditPhotos && photoDeleteMessage ? (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">{photoDeleteMessage}</p>
+                ) : null}
+                {ownerMayEditPhotos && coverMessage ? (
                   <p className="text-xs text-zinc-600 dark:text-zinc-400">{coverMessage}</p>
                 ) : null}
               </div>
@@ -494,8 +713,25 @@ export default function BookGalleryPage() {
                                   : [...prev, p.id]
                               )
                             }
-                            aria-label={`책 콘텐츠로 추가할 사진 선택: ${p.originalName || p.id}`}
+                            aria-label={`책에 채택할 사진 선택: ${p.originalName || p.id}`}
                             className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-2 focus:ring-zinc-400 dark:border-zinc-600 dark:bg-zinc-950 dark:focus:ring-zinc-500"
+                          />
+                        </div>
+                      ) : null}
+                      {effectivePhotoDeleteMode ? (
+                        <div className="pointer-events-auto absolute left-1 top-1 z-10 rounded bg-white/90 p-0.5 shadow dark:bg-zinc-900/90">
+                          <input
+                            type="checkbox"
+                            checked={selectedDeletePhotoIds.includes(p.id)}
+                            onChange={() =>
+                              setSelectedDeletePhotoIds((prev) =>
+                                prev.includes(p.id)
+                                  ? prev.filter((x) => x !== p.id)
+                                  : [...prev, p.id]
+                              )
+                            }
+                            aria-label={`삭제할 사진 선택: ${p.originalName || p.id}`}
+                            className="h-4 w-4 rounded border-zinc-300 text-red-800 focus:ring-2 focus:ring-red-400 dark:border-zinc-600 dark:bg-zinc-950 dark:focus:ring-red-500"
                           />
                         </div>
                       ) : null}
@@ -505,8 +741,10 @@ export default function BookGalleryPage() {
                           effectiveCoverSelectMode
                             ? "클릭하여 표지 후보 선택"
                             : effectivePhotoSelectMode
-                              ? "클릭하여 콘텐츠에 넣을 사진 선택"
-                              : "클릭하여 이 기기에 저장"
+                              ? "클릭하여 채택할 사진 선택"
+                              : effectivePhotoDeleteMode
+                                ? "클릭하여 삭제할 사진 선택"
+                                : "클릭하여 이 기기에 저장"
                         }
                         className="block w-full cursor-pointer rounded-lg p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                         onClick={() => {
@@ -518,6 +756,14 @@ export default function BookGalleryPage() {
                           }
                           if (effectivePhotoSelectMode) {
                             setSelectedPhotoIds((prev) =>
+                              prev.includes(p.id)
+                                ? prev.filter((x) => x !== p.id)
+                                : [...prev, p.id]
+                            );
+                            return;
+                          }
+                          if (effectivePhotoDeleteMode) {
+                            setSelectedDeletePhotoIds((prev) =>
                               prev.includes(p.id)
                                 ? prev.filter((x) => x !== p.id)
                                 : [...prev, p.id]
@@ -537,7 +783,9 @@ export default function BookGalleryPage() {
                           src={localPhotoAbsoluteUrl(p.fileUrl)}
                           alt={p.originalName}
                           className={`aspect-square w-full object-cover bg-zinc-100 dark:bg-zinc-900 ${
-                            effectiveCoverSelectMode || effectivePhotoSelectMode
+                            effectiveCoverSelectMode ||
+                            effectivePhotoSelectMode ||
+                            effectivePhotoDeleteMode
                               ? ""
                               : "pointer-events-none"
                           }`}

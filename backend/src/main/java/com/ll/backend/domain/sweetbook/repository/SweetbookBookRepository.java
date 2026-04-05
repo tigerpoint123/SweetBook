@@ -13,6 +13,8 @@ public interface SweetbookBookRepository extends JpaRepository<SweetbookBook, Lo
 
     Optional<SweetbookBook> findByBookUid(String bookUid);
 
+    Optional<SweetbookBook> findByBookUidAndMemberId(String bookUid, Long memberId);
+
     List<SweetbookBook> findAllByMemberIdOrderByIdDesc(Long memberId);
 
     void deleteByBookUidAndMemberId(String bookUid, Long memberId);

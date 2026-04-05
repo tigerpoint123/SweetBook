@@ -1,12 +1,14 @@
 package com.ll.backend.domain.sweetbook.service;
 
 import com.ll.backend.domain.photo.entity.Photo;
+import com.ll.backend.domain.photo.repository.BookCoverRepository;
 import com.ll.backend.domain.photo.repository.PhotoRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
 import com.ll.backend.domain.sweetbook.support.SweetbookCreateResponseParser;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
 import com.ll.backend.global.client.SweetbookApiClient;
+import com.ll.backend.global.storage.LocalPhotoStorage;
 import com.ll.backend.global.client.dto.AddBookContentsRequest;
 import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.BooksListData;
@@ -14,11 +16,13 @@ import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.PhotoUploadOutcome;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,10 +31,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     private final SweetbookApiClient sweetbookApiClient;
     private final PhotoRepository photoRepository;
+    private final BookCoverRepository bookCoverRepository;
+    private final LocalPhotoStorage localPhotoStorage;
     private final SweetbookBookRepository sweetbookBookRepository;
 
     @Override
@@ -114,10 +121,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
         if (memberId <= 0) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
         }
-        if (!sweetbookBookRepository.existsByBookUidAndMemberId(bookUid, memberId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN, "이 북의 콘텐츠를 추가할 권한이 없습니다.");
-        }
+        assertMemberOwnsBookAndNotFinalized(bookUid, memberId);
         return sweetbookApiClient.addBookContents(bookUid, request);
     }
 
@@ -138,6 +142,94 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
             sweetbookBookRepository.deleteByBookUidAndMemberId(bookUid, memberId);
         }
         return response;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> deleteBookPhoto(String bookUid, String fileName, Long memberId) {
+        Objects.requireNonNull(bookUid, "bookUid");
+        Objects.requireNonNull(fileName, "fileName");
+        Objects.requireNonNull(memberId, "memberId");
+        if (memberId <= 0) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        assertMemberOwnsBookAndNotFinalized(bookUid, memberId);
+        String name = fileName.trim();
+        if (name.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fileName이 비어 있습니다.");
+        }
+        Photo photo =
+                photoRepository
+                        .findByBookUidAndSweetbookFileName(bookUid, name)
+                        .orElseThrow(
+                                () -> new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND, "해당 북·파일명의 로컬 사진 기록이 없습니다."));
+        Map<String, Object> response = sweetbookApiClient.deleteBookPhoto(bookUid, name);
+        bookCoverRepository
+                .findByBookUid(bookUid)
+                .filter(bc -> bc.getPhotoId().equals(photo.getId()))
+                .ifPresent(bookCoverRepository::delete);
+        try {
+            localPhotoStorage.deleteIfUnderUploadRoot(photo.getLocalPath());
+        } catch (Exception e) {
+            log.warn("로컬 사진 파일 삭제 중 오류 bookUid={} photoId={}", bookUid, photo.getId(), e);
+        }
+        photoRepository.delete(photo);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> finalizeBook(String bookUid, Long memberId) {
+        Objects.requireNonNull(bookUid, "bookUid");
+        Objects.requireNonNull(memberId, "memberId");
+        if (memberId <= 0) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        if (!sweetbookBookRepository.existsByBookUidAndMemberId(bookUid, memberId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "이 북을 최종화할 권한이 없습니다.");
+        }
+        Map<String, Object> response = sweetbookApiClient.finalizeBook(bookUid);
+        if (Boolean.TRUE.equals(response.get("success"))) {
+            Instant at = parseFinalizedAtFromSweetbookResponse(response);
+            sweetbookBookRepository
+                    .findByBookUidAndMemberId(bookUid, memberId)
+                    .ifPresent(
+                            book -> {
+                                book.markFinalized(at);
+                                sweetbookBookRepository.save(book);
+                            });
+        }
+        return response;
+    }
+
+    private void assertMemberOwnsBookAndNotFinalized(String bookUid, Long memberId) {
+        SweetbookBook book =
+                sweetbookBookRepository
+                        .findByBookUidAndMemberId(bookUid, memberId)
+                        .orElseThrow(
+                                () ->
+                                        new ResponseStatusException(
+                                                HttpStatus.FORBIDDEN, "이 북을 수정할 권한이 없습니다."));
+        if (book.getFinalizedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 최종화된 책입니다");
+        }
+    }
+
+    private static Instant parseFinalizedAtFromSweetbookResponse(Map<String, Object> response) {
+        Object data = response.get("data");
+        if (data instanceof Map<?, ?> m) {
+            Object fa = m.get("finalizedAt");
+            if (fa instanceof String s && !s.isBlank()) {
+                try {
+                    return Instant.parse(s);
+                } catch (Exception ignored) {
+                    // fall through
+                }
+            }
+        }
+        return Instant.now();
     }
 
     private void persistPhotoAfterUpload(String bookUid, PhotoUploadOutcome outcome) {

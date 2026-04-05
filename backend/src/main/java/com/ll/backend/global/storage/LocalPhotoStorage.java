@@ -39,4 +39,22 @@ public class LocalPhotoStorage {
         String base = name.replaceAll("[\\\\/:*?\"<>|]", "_");
         return base.length() > 200 ? base.substring(0, 200) : base;
     }
+
+    public void deleteIfUnderUploadRoot(String storedPath) {
+        if (storedPath == null || storedPath.isBlank()) {
+            return;
+        }
+        Path path = Paths.get(storedPath).normalize().toAbsolutePath();
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        if (!path.startsWith(root) || !Files.isRegularFile(path)) {
+            log.warn("로컬 사진 삭제 스킵(경로 불일치 또는 없음) path={}", storedPath);
+            return;
+        }
+        try {
+            Files.deleteIfExists(path);
+            log.info("로컬 사진 파일 삭제 path={}", path);
+        } catch (IOException e) {
+            throw new UncheckedIOException("로컬 사진 파일 삭제 실패 path=" + storedPath, e);
+        }
+    }
 }

@@ -14,6 +14,18 @@ export function sweetbookBookPhotosUrl(bookUid: string): string {
   return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/photos`;
 }
 
+/** DELETE /v1/books/{bookUid}/photos/{fileName} 프록시 (세션·북 소유자·로컬 DB 행 필요) */
+export function sweetbookBookPhotoItemUrl(bookUid: string, fileName: string): string {
+  return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/photos/${encodeURIComponent(fileName)}`;
+}
+
+export async function deleteBookPhoto(bookUid: string, fileName: string): Promise<Response> {
+  return fetch(sweetbookBookPhotoItemUrl(bookUid, fileName), {
+    method: "DELETE",
+    credentials: "include",
+  });
+}
+
 /** 로컬 DB(sweetbook_book 또는 photo)에 북이 있을 때만 Sweetbook 사진 목록 */
 export function sweetbookBookGalleryUrl(bookUid: string): string {
   return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/gallery`;
@@ -29,6 +41,64 @@ export function sweetbookBookContentsUrl(bookUid: string): string {
   return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/contents`;
 }
 
+/** POST /api/sweetbook/books/{bookUid}/finalization → Sweetbook 편집 최종화 */
+export function sweetbookBookFinalizationUrl(bookUid: string): string {
+  return `${API_BASE}/api/sweetbook/books/${encodeURIComponent(bookUid)}/finalization`;
+}
+
+export type FinalizeBookResponse = {
+  success?: boolean;
+  message?: string;
+  errors?: unknown;
+  data?: {
+    result?: string;
+    pageCount?: number;
+    finalizedAt?: string;
+  };
+};
+
+/**
+ * Sweetbook 최종화 오류 등 `errors` 배열의
+ * `최소 페이지 미달: 현재 10p, 최소 24p` 형태를 UI용 문장으로 변환.
+ */
+export function formatFinalizeMinimumPageMessage(errors: unknown): string | null {
+  if (!Array.isArray(errors)) return null;
+  for (const item of errors) {
+    if (typeof item !== "string") continue;
+    const m = item.match(/현재\s*(\d+)\s*p\s*,\s*최소\s*(\d+)\s*p/i);
+    if (m) {
+      return `최소 페이지: ${m[2]}페이지, 현재 페이지: ${m[1]}페이지`;
+    }
+  }
+  return null;
+}
+
+/** 최종화 실패 시 사용자에게 보여줄 문장 (페이지 부족 우선, 그다음 errors·message) */
+export function resolveFinalizeFailureMessage(
+  parsed: FinalizeBookResponse,
+  rawText: string
+): string {
+  const pageMsg = formatFinalizeMinimumPageMessage(parsed.errors);
+  if (pageMsg) return pageMsg;
+  const errs = parsed.errors;
+  if (Array.isArray(errs) && errs.length > 0) {
+    const lines = errs.filter((x): x is string => typeof x === "string");
+    if (lines.length > 0) return lines.join("\n");
+  }
+  const msg = parsed.message;
+  if (typeof msg === "string" && msg.trim() !== "" && msg !== "Bad Request") {
+    return msg;
+  }
+  return rawText.trim() !== "" ? rawText : "최종화 요청에 실패했습니다.";
+}
+
+export async function postBookFinalization(bookUid: string): Promise<Response> {
+  return fetch(sweetbookBookFinalizationUrl(bookUid), {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
 export type AddBookContentsResponse = {
   success?: boolean;
   message?: string;
@@ -39,9 +109,36 @@ export type AddBookContentsResponse = {
   };
 };
 
+/** 기본 콘텐츠 템플릿 UID — 백엔드 `sweetbook.contents.template-uid` 기본값과 동일 */
+export const SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID = "1vuzMfUnCkXS";
+
+/** POST .../photos 응답 본문에서 `data.fileName` 추출 */
+export function extractSweetbookUploadFileName(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const root = data as Record<string, unknown>;
+  const inner = root.data;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    const fn = (inner as Record<string, unknown>).fileName;
+    if (typeof fn === "string" && fn.trim()) return fn.trim();
+  }
+  return null;
+}
+
+/**
+ * POST /api/sweetbook/books/{bookUid}/contents JSON 본문.
+ * 템플릿 1vuzMfUnCkXS: `monthYearLabel`(비우면 백엔드 Asia/Seoul `yyyy-MM`) + `photos`(Sweetbook `fileName` 문자열만 배열).
+ */
+export type AddBookContentsBody = {
+  templateUid: string;
+  parameters: {
+    monthYearLabel: string;
+    photos: string[];
+  };
+};
+
 export async function postBookContents(
   bookUid: string,
-  body: { rowPhotos: string[]; monthYearLabel?: string }
+  body: AddBookContentsBody
 ): Promise<Response> {
   return fetch(sweetbookBookContentsUrl(bookUid), {
     method: "POST",
@@ -186,6 +283,8 @@ export type BooksListQuery = {
 export type MyBookEntry = {
   bookUid: string;
   createdAt: string;
+  /** 백엔드에서 Sweetbook 최종화 반영 여부 */
+  finalized?: boolean;
 };
 
 export async function fetchMyBookEntries(): Promise<Response> {
