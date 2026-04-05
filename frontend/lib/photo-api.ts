@@ -11,6 +11,9 @@ export type LocalPhotoItem = {
   hash: string;
   isDuplicate: boolean;
   fileUrl: string;
+  isSample?: boolean;
+  originalUrl?: string;
+  blurUrl?: string;
 };
 
 export function localPhotoAbsoluteUrl(fileUrl: string): string {
@@ -67,6 +70,79 @@ export async function downloadLocalPhoto(
     a.remove();
   } finally {
     URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/** 샘플·비샘플 두 번 조회 후 id 내림차순으로 합칩니다(책 갤러리 왼쪽 목록용). */
+export function mergeBookGalleryLocalPhotos(
+  samples: LocalPhotoItem[],
+  nonSamples: LocalPhotoItem[]
+): LocalPhotoItem[] {
+  const byId = new Map<number, LocalPhotoItem>();
+  for (const p of samples) {
+    if (typeof p?.id === "number") byId.set(p.id, p);
+  }
+  for (const p of nonSamples) {
+    if (typeof p?.id === "number") byId.set(p.id, p);
+  }
+  return [...byId.values()].sort((a, b) => b.id - a.id);
+}
+
+/** GET …/sample-photos + …/non-sample-photos (병렬 2회) */
+export async function fetchBookLocalPhotosSplit(bookUid: string): Promise<{
+  ok: boolean;
+  photos: LocalPhotoItem[];
+  errorMessage: string | null;
+}> {
+  const uid = bookUid.trim();
+  if (!uid) {
+    return { ok: false, photos: [], errorMessage: "bookUid가 없습니다." };
+  }
+  const base = `${API_BASE}/api/photos/books/${encodeURIComponent(uid)}`;
+  const [sampleRes, nonSampleRes] = await Promise.all([
+    fetch(`${base}/sample-photos`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    }),
+    fetch(`${base}/non-sample-photos`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    }),
+  ]);
+  const sampleText = await sampleRes.text();
+  const nonSampleText = await nonSampleRes.text();
+  if (!sampleRes.ok) {
+    return {
+      ok: false,
+      photos: [],
+      errorMessage: sampleText || `샘플 사진 목록 실패 (${sampleRes.status})`,
+    };
+  }
+  if (!nonSampleRes.ok) {
+    return {
+      ok: false,
+      photos: [],
+      errorMessage: nonSampleText || `비샘플 사진 목록 실패 (${nonSampleRes.status})`,
+    };
+  }
+  try {
+    const samples = JSON.parse(sampleText) as unknown;
+    const nonSamples = JSON.parse(nonSampleText) as unknown;
+    if (!Array.isArray(samples) || !Array.isArray(nonSamples)) {
+      return { ok: false, photos: [], errorMessage: "사진 목록 형식이 올바르지 않습니다." };
+    }
+    return {
+      ok: true,
+      photos: mergeBookGalleryLocalPhotos(
+        samples as LocalPhotoItem[],
+        nonSamples as LocalPhotoItem[]
+      ),
+      errorMessage: null,
+    };
+  } catch {
+    return { ok: false, photos: [], errorMessage: "로컬 사진 목록을 해석할 수 없습니다." };
   }
 }
 

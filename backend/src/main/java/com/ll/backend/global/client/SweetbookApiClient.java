@@ -279,11 +279,14 @@ public class SweetbookApiClient {
                     .block();
             logSweetbookServerResponse("uploadPhoto", "bookUid=" + bookUid, response);
 
-            String localPath = null;
+            String originalPath = null;
+            String blurPath = null;
             if (response != null && response.success() && response.data() != null) {
-                localPath = saveUploadedPhotoLocally(bookUid, bytes, filename);
+                LocalPhotoStorage.SavedPaths paths = saveUploadedPhotoLocally(bookUid, bytes, filename);
+                originalPath = paths.originalAbsolutePath();
+                blurPath = paths.blurAbsolutePath();
             }
-            return new PhotoUploadOutcome(response, localPath);
+            return new PhotoUploadOutcome(response, originalPath, blurPath);
         } catch (WebClientResponseException e) {
             log.error(
                     "Sweetbook uploadPhoto 실패 bookUid={} status={} 서버응답body={}",
@@ -426,7 +429,8 @@ public class SweetbookApiClient {
         return (original != null && !original.isBlank()) ? original : fallback;
     }
 
-    private String saveUploadedPhotoLocally(String bookUid, byte[] bytes, String originalFilename) {
+    private LocalPhotoStorage.SavedPaths saveUploadedPhotoLocally(
+            String bookUid, byte[] bytes, String originalFilename) {
         return localPhotoStorage.save(bookUid, bytes, originalFilename);
     }
 

@@ -2,6 +2,7 @@ package com.ll.backend.domain.sweetbook.service;
 
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
 import com.ll.backend.global.client.dto.AddBookContentsRequest;
+import com.ll.backend.global.client.dto.BookGalleryData;
 import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.BooksListData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
@@ -28,7 +29,7 @@ public interface SweetbookApiService {
 
     SweetbookApiEnvelope<BookPhotosData> getBookPhotos(String bookUid);
 
-    SweetbookApiEnvelope<BookPhotosData> getBookPhotosAfterLocalLookup(String bookUid);
+    SweetbookApiEnvelope<BookGalleryData> getBookPhotosAfterLocalLookup(String bookUid);
 
     SweetbookApiEnvelope<PhotoUploadData> uploadPhoto(String bookUid, MultipartFile file);
 

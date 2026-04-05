@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { clearLoggedIn, readLoggedIn } from "@/lib/auth-storage";
 import {
   downloadLocalPhoto,
-  fetchLocalPhotos,
+  fetchBookLocalPhotosSplit,
   fetchSelectedPhotosForBook,
   localPhotoAbsoluteUrl,
   appendBookSelection,
@@ -146,23 +146,19 @@ export default function BookGalleryPage() {
 
     async function load() {
       try {
-        const [gRes, lRes, sRes] = await Promise.all([
+        const [gRes, localSplit, sRes] = await Promise.all([
           fetchBookGallery(bookUid),
-          fetchLocalPhotos(bookUid),
+          fetchBookLocalPhotosSplit(bookUid),
           fetchSelectedPhotosForBook(bookUid),
         ]);
         if (cancelled) return;
 
-        const lText = await lRes.text();
         let locals: LocalPhotoItem[] = [];
-        if (lRes.ok) {
-          try {
-            locals = JSON.parse(lText) as LocalPhotoItem[];
-          } catch {
-            setLocalLoadError("로컬 사진 목록을 해석할 수 없습니다.");
-          }
+        if (localSplit.ok) {
+          locals = localSplit.photos;
+          setLocalLoadError(null);
         } else {
-          setLocalLoadError(lText || `로컬 사진 목록 실패 (${lRes.status})`);
+          setLocalLoadError(localSplit.errorMessage ?? "로컬 사진 목록을 불러오지 못했습니다.");
         }
         setLocalPhotos(locals);
 
@@ -369,14 +365,12 @@ export default function BookGalleryPage() {
   async function reloadLocalPhotosForBook() {
     const uid = bookUid.trim();
     if (!uid) return;
-    const lRes = await fetchLocalPhotos(uid);
-    const lText = await lRes.text();
-    if (lRes.ok) {
-      try {
-        setLocalPhotos(JSON.parse(lText) as LocalPhotoItem[]);
-      } catch {
-        setLocalLoadError("로컬 사진 목록을 해석할 수 없습니다.");
-      }
+    const split = await fetchBookLocalPhotosSplit(uid);
+    if (split.ok) {
+      setLocalPhotos(split.photos);
+      setLocalLoadError(null);
+    } else {
+      setLocalLoadError(split.errorMessage ?? "로컬 사진 목록을 불러오지 못했습니다.");
     }
     await reloadSelectedPhotosForBook();
   }
@@ -814,7 +808,7 @@ export default function BookGalleryPage() {
                                 ? "클릭하여 삭제할 사진 선택"
                                 : "클릭하여 이 기기에 저장"
                         }
-                        className="block w-full cursor-pointer rounded-lg p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                        className="relative block w-full cursor-pointer rounded-lg p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                         onClick={() => {
                           if (effectiveCoverSelectMode) {
                             setSelectedCoverPhotoId((cur) =>

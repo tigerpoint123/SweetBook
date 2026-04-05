@@ -208,6 +208,13 @@ export type BookPhotosData = {
   totalCount: number;
 };
 
+/** GET …/gallery `data` — Sweetbook 사진 + 로컬 DB `finalized` */
+export type BookGalleryData = {
+  photos: BookPhotoItem[];
+  totalCount: number;
+  finalized: boolean;
+};
+
 export type BookPhotosEnvelope = {
   success: boolean;
   data: BookPhotosData;

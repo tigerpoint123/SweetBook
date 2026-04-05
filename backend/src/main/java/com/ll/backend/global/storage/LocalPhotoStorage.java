@@ -1,5 +1,6 @@
 package com.ll.backend.global.storage;
 
+import com.ll.backend.global.image.ImageBlurUtil;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -13,20 +14,34 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class LocalPhotoStorage {
 
+    public static final String SUBDIR_ORIGINAL = "original";
+    public static final String SUBDIR_BLUR = "blur";
+
     @Value("${app.photo.upload-dir:uploads/photos}")
     private String uploadDir;
 
-    public String save(String bookUid, byte[] bytes, String originalFilename) {
+    public record SavedPaths(String originalAbsolutePath, String blurAbsolutePath) {}
+
+    /**
+     * {@code uploads/photos/{bookUid}/original/} 에 원본 저장 후, 동일 파일명으로 {@code .../blur/} 에 블러 복제본을 만듭니다.
+     */
+    public SavedPaths save(String bookUid, byte[] bytes, String originalFilename) {
         String safe = sanitizeFilename(originalFilename);
         String name = System.currentTimeMillis() + "_" + safe;
-        Path dir = Paths.get(uploadDir).resolve(bookUid).normalize();
+        Path rootBook = Paths.get(uploadDir).resolve(bookUid).normalize();
+        Path originalDir = rootBook.resolve(SUBDIR_ORIGINAL);
+        Path blurDir = rootBook.resolve(SUBDIR_BLUR);
         try {
-            Files.createDirectories(dir);
-            Path file = dir.resolve(name);
-            Files.write(file, bytes);
-            String path = file.toAbsolutePath().toString().replace('\\', '/');
-            log.info("로컬 사진 저장 path={}", path);
-            return path;
+            Files.createDirectories(originalDir);
+            Files.createDirectories(blurDir);
+            Path originalFile = originalDir.resolve(name);
+            Files.write(originalFile, bytes);
+            Path blurFile = blurDir.resolve(name);
+            ImageBlurUtil.blurToFileOrCopy(originalFile, blurFile);
+            String op = originalFile.toAbsolutePath().toString().replace('\\', '/');
+            String bp = blurFile.toAbsolutePath().toString().replace('\\', '/');
+            log.info("로컬 사진 저장 original={} blur={}", op, bp);
+            return new SavedPaths(op, bp);
         } catch (IOException e) {
             throw new UncheckedIOException("로컬 사진 저장 실패 bookUid=" + bookUid, e);
         }
@@ -56,5 +71,9 @@ public class LocalPhotoStorage {
         } catch (IOException e) {
             throw new UncheckedIOException("로컬 사진 파일 삭제 실패 path=" + storedPath, e);
         }
+    }
+
+    public String getUploadDir() {
+        return uploadDir;
     }
 }

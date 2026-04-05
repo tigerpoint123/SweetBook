@@ -5,6 +5,7 @@ import com.ll.backend.domain.sweetbook.service.SweetbookApiService;
 import com.ll.backend.domain.sweetbook.support.SweetbookCoverDefaults;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
 import com.ll.backend.global.client.dto.AddBookContentsRequest;
+import com.ll.backend.global.client.dto.BookGalleryData;
 import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.BooksListData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
@@ -111,7 +112,7 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
     }
 
     @GetMapping(value = "/books/{bookUid}/gallery", produces = MediaType.APPLICATION_JSON_VALUE)
-    public SweetbookApiEnvelope<BookPhotosData> getBookGallery(@PathVariable String bookUid) {
+    public SweetbookApiEnvelope<BookGalleryData> getBookGallery(@PathVariable String bookUid) {
         return sweetbookApiService.getBookPhotosAfterLocalLookup(bookUid);
     }
 

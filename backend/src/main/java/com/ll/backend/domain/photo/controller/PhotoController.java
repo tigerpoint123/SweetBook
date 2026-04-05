@@ -1,5 +1,6 @@
 package com.ll.backend.domain.photo.controller;
 
+import com.ll.backend.domain.member.service.MemberService;
 import com.ll.backend.domain.photo.dto.BookCoverItemResponse;
 import com.ll.backend.domain.photo.dto.LocalPhotoItemResponse;
 import com.ll.backend.domain.photo.dto.SaveBookCoverRequest;
@@ -14,6 +15,7 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,24 +29,54 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class PhotoController {
 
+    private static final String SESSION_COOKIE_NAME = "SESSION";
+
     private final PhotoService photoService;
+    private final MemberService memberService;
+
+    private Optional<Long> memberIdFromSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Optional.empty();
+        }
+        return memberService.resolveMemberIdBySessionId(sessionId);
+    }
 
     @GetMapping
-    public List<LocalPhotoItemResponse> list(@RequestParam(required = false) String bookUid) {
-        return photoService.list(Optional.ofNullable(bookUid));
+    public List<LocalPhotoItemResponse> list(
+            @RequestParam(required = false) String bookUid,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        return photoService.list(Optional.ofNullable(bookUid), memberIdFromSession(sessionId));
     }
 
     @GetMapping("/books/{bookUid}")
-    public List<LocalPhotoItemResponse> listByBook(@PathVariable String bookUid) {
-        return photoService.list(Optional.of(bookUid));
+    public List<LocalPhotoItemResponse> listByBook(
+            @PathVariable String bookUid,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        return photoService.list(Optional.of(bookUid), memberIdFromSession(sessionId));
+    }
+
+    /** 갤러리 분할 조회 1: 샘플(상위 3)만, {@code fileUrl} 항상 원본 {@code /file} */
+    @GetMapping("/books/{bookUid}/sample-photos")
+    public List<LocalPhotoItemResponse> listSamplePhotosForBook(@PathVariable String bookUid) {
+        return photoService.listSamplePhotosForBook(bookUid);
+    }
+
+    /** 갤러리 분할 조회 2: 비샘플만, 제한 조회자는 {@code /blur} */
+    @GetMapping("/books/{bookUid}/non-sample-photos")
+    public List<LocalPhotoItemResponse> listNonSamplePhotosForBook(
+            @PathVariable String bookUid,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        return photoService.listNonSamplePhotosForBook(bookUid, memberIdFromSession(sessionId));
     }
 
     /** 사진 채택으로 북 넘김에 쓸 사진만 (selected_photo.id 오름차순 — 최근 채택이 맨 뒤) */
     @GetMapping("/books/{bookUid}/selected")
-    public ResponseEntity<List<LocalPhotoItemResponse>> listSelectedByBook(@PathVariable String bookUid) {
+    public ResponseEntity<List<LocalPhotoItemResponse>> listSelectedByBook(
+            @PathVariable String bookUid,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(photoService.listSelectedForBook(bookUid));
+                .body(photoService.listSelectedForBook(bookUid, memberIdFromSession(sessionId)));
     }
 
     /** 기존 채택을 지우지 않고, 요청한 photoIds만 순서대로 추가 */
@@ -76,11 +108,34 @@ public class PhotoController {
     }
 
     @GetMapping("/{id}/file")
-    public ResponseEntity<Resource> file(@PathVariable Long id) {
-        PhotoService.ServedPhoto served = photoService.servePhoto(id);
+    public ResponseEntity<Resource> file(
+            @PathVariable Long id,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        PhotoService.ServedPhoto served = photoService.servePhoto(id, memberIdFromSession(sessionId));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, served.contentType())
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(served.resource());
+    }
+
+    @GetMapping("/{id}/original")
+    public ResponseEntity<Resource> original(
+            @PathVariable Long id,
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+        PhotoService.ServedPhoto served =
+                photoService.servePhotoOriginal(id, memberIdFromSession(sessionId));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, served.contentType())
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(served.resource());
+    }
+
+    @GetMapping("/{id}/blur")
+    public ResponseEntity<Resource> blur(@PathVariable Long id) {
+        PhotoService.ServedPhoto served = photoService.servePhotoBlur(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, served.contentType())
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
                 .body(served.resource());
     }
 }

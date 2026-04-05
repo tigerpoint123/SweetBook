@@ -27,6 +27,7 @@ declare module "page-flip" {
   export class PageFlip {
     constructor(element: HTMLElement, settings: PageFlipSettings);
     loadFromImages(urls: string[]): void;
+    loadFromHTML(items: HTMLElement[] | NodeListOf<HTMLElement>): void;
     destroy(): void;
     off(event: string): void;
     flipNext(corner?: string): void;
