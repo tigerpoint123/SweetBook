@@ -18,4 +18,7 @@ public interface SweetbookBookRepository extends JpaRepository<SweetbookBook, Lo
     List<SweetbookBook> findAllByMemberIdOrderByIdDesc(Long memberId);
 
     void deleteByBookUidAndMemberId(String bookUid, Long memberId);
+
+    /** 메인 등: 로컬 DB에서 편집 최종화된 책만 */
+    List<SweetbookBook> findAllByFinalizedAtIsNotNull();
 }

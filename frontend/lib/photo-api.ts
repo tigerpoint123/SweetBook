@@ -70,7 +70,7 @@ export async function downloadLocalPhoto(
   }
 }
 
-/** GET /api/photos — 선택적 bookUid 쿼리로 해당 북만 필터 */
+/** GET /api/photos — 선택적 bookUid 시 해당 북만; 갤러리 순서는 photo.id 내림차순 */
 export async function fetchLocalPhotos(bookUid?: string): Promise<Response> {
   const q = bookUid?.trim()
     ? `?bookUid=${encodeURIComponent(bookUid.trim())}`
@@ -79,6 +79,30 @@ export async function fetchLocalPhotos(bookUid?: string): Promise<Response> {
     method: "GET",
     credentials: "include",
   });
+}
+
+/** GET …/selected — 책 넘김용 채택만, selected_photo.id 오름차순(최근 채택이 뒤) */
+export async function fetchSelectedPhotosForBook(bookUid: string): Promise<Response> {
+  return fetch(
+    `${API_BASE}/api/photos/books/${encodeURIComponent(bookUid.trim())}/selected`,
+    { method: "GET", credentials: "include", cache: "no-store" }
+  );
+}
+
+/** POST /api/photos/books/{bookUid}/selected — 이번 채택분만 추가(기존 유지) */
+export async function appendBookSelection(
+  bookUid: string,
+  photoIds: number[]
+): Promise<Response> {
+  return fetch(
+    `${API_BASE}/api/photos/books/${encodeURIComponent(bookUid.trim())}/selected`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoIds }),
+    }
+  );
 }
 
 export type BookCoverItem = {

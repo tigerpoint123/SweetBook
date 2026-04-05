@@ -126,7 +126,7 @@ export function extractSweetbookUploadFileName(data: unknown): string | null {
 
 /**
  * POST /api/sweetbook/books/{bookUid}/contents JSON 본문.
- * 템플릿 1vuzMfUnCkXS: `monthYearLabel`(비우면 백엔드 Asia/Seoul `yyyy-MM`) + `photos`(Sweetbook `fileName` 문자열만 배열).
+ * 템플릿 1vuzMfUnCkXS: `monthYearLabel`(비우면 백엔드 Asia/Seoul `yyyy-MM`) + `photos`(Sweetbook `fileName` 문자열 배열; 책 페이지에서는 보통 한 장씩 `[name]`으로 여러 번 호출).
  */
 export type AddBookContentsBody = {
   templateUid: string;
@@ -276,6 +276,8 @@ export type BooksListQuery = {
   pdfStatusIn?: string;
   createdFrom?: string;
   createdTo?: string;
+  /** true면 백엔드 DB에 finalized_at 이 있는 책만 (Sweetbook 목록과 교집합) */
+  finalizedOnly?: boolean;
 };
 
 /** GET /api/sweetbook/books → Sweetbook GET /v1/books (쿼리는 값이 있을 때만 전달) */
@@ -332,6 +334,9 @@ export async function fetchBooksList(params?: BooksListQuery): Promise<Response>
   }
   if (params?.createdTo != null && params.createdTo !== "") {
     sp.set("createdTo", params.createdTo);
+  }
+  if (params?.finalizedOnly === true) {
+    sp.set("finalizedOnly", "true");
   }
   const q = sp.toString();
   return fetch(`${sweetbookBooksUrl}${q ? `?${q}` : ""}`, {

@@ -5,11 +5,14 @@ import com.ll.backend.domain.photo.dto.LocalPhotoItemResponse;
 import com.ll.backend.domain.photo.dto.SaveBookCoverRequest;
 import com.ll.backend.domain.photo.entity.BookCover;
 import com.ll.backend.domain.photo.entity.Photo;
+import com.ll.backend.domain.photo.entity.SelectedPhoto;
 import com.ll.backend.domain.photo.repository.BookCoverRepository;
 import com.ll.backend.domain.photo.repository.PhotoRepository;
+import com.ll.backend.domain.photo.repository.SelectedPhotoRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,6 +30,7 @@ public class PhotoServiceImpl implements PhotoService {
 
     private final PhotoRepository photoRepository;
     private final BookCoverRepository bookCoverRepository;
+    private final SelectedPhotoRepository selectedPhotoRepository;
 
     @Value("${app.photo.upload-dir:uploads/photos}")
     private String uploadDir;
@@ -38,6 +42,47 @@ public class PhotoServiceImpl implements PhotoService {
                         .map(photoRepository::findByBookUidOrderByIdDesc)
                         .orElseGet(photoRepository::findAllByOrderByIdDesc);
         return photos.stream().map(this::toItem).toList();
+    }
+
+    @Override
+    public List<LocalPhotoItemResponse> listSelectedForBook(String bookUid) {
+        Objects.requireNonNull(bookUid, "bookUid");
+        String uid = bookUid.trim();
+        if (uid.isEmpty()) {
+            return List.of();
+        }
+        List<LocalPhotoItemResponse> out = new ArrayList<>();
+        for (SelectedPhoto sp : selectedPhotoRepository.findAllByBookUidOrderByIdAsc(uid)) {
+            photoRepository
+                    .findById(sp.getPhotoId())
+                    .ifPresent(p -> out.add(toItem(p)));
+        }
+        return out;
+    }
+
+    @Override
+    @Transactional
+    public void appendBookSelection(String bookUid, List<Long> photoIds) {
+        Objects.requireNonNull(bookUid, "bookUid");
+        String uid = bookUid.trim();
+        if (uid.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bookUid is blank");
+        }
+        List<Long> ids = photoIds != null ? photoIds : List.of();
+        for (Long pid : ids) {
+            if (pid == null || pid <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "유효하지 않은 photo id");
+            }
+            Photo photo =
+                    photoRepository
+                            .findById(pid)
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "photo not found"));
+            if (!uid.equals(photo.getBookUid())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "해당 사진은 이 북(bookUid)에 속하지 않습니다.");
+            }
+            selectedPhotoRepository.save(SelectedPhoto.builder().bookUid(uid).photoId(pid).build());
+        }
     }
 
     @Override

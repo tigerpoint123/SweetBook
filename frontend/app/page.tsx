@@ -35,7 +35,7 @@ export default function HomePage() {
     let cancelled = false;
     setBooksLoading(true);
     setBooksError(null);
-    fetchBooksList({ limit: 48, offset: 0 })
+    fetchBooksList({ limit: 48, offset: 0, finalizedOnly: true })
       .then(async (res) => {
         const text = await res.text();
         if (cancelled) return;
@@ -188,7 +188,9 @@ export default function HomePage() {
             <p className="text-center text-sm text-zinc-500">목록을 가져오지 못했습니다.</p>
           ) : null}
           {!booksLoading && !booksError && booksEnvelope?.success && books.length === 0 ? (
-            <p className="text-center text-sm text-zinc-500">표시할 책이 없습니다.</p>
+            <p className="text-center text-sm text-zinc-500">
+              최종화된 책이 없습니다. (메인에는 편집을 마친 책만 표시됩니다.)
+            </p>
           ) : null}
           {books.length > 0 ? (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

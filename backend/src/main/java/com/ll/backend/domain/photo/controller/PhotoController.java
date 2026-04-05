@@ -3,12 +3,14 @@ package com.ll.backend.domain.photo.controller;
 import com.ll.backend.domain.photo.dto.BookCoverItemResponse;
 import com.ll.backend.domain.photo.dto.LocalPhotoItemResponse;
 import com.ll.backend.domain.photo.dto.SaveBookCoverRequest;
+import com.ll.backend.domain.photo.dto.SaveBookSelectionRequest;
 import com.ll.backend.domain.photo.service.PhotoService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,26 @@ public class PhotoController {
     @GetMapping("/books/{bookUid}")
     public List<LocalPhotoItemResponse> listByBook(@PathVariable String bookUid) {
         return photoService.list(Optional.of(bookUid));
+    }
+
+    /** 사진 채택으로 북 넘김에 쓸 사진만 (selected_photo.id 오름차순 — 최근 채택이 맨 뒤) */
+    @GetMapping("/books/{bookUid}/selected")
+    public ResponseEntity<List<LocalPhotoItemResponse>> listSelectedByBook(@PathVariable String bookUid) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(photoService.listSelectedForBook(bookUid));
+    }
+
+    /** 기존 채택을 지우지 않고, 요청한 photoIds만 순서대로 추가 */
+    @PostMapping(
+            value = "/books/{bookUid}/selected",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public ResponseEntity<Void> appendBookSelection(
+            @PathVariable String bookUid, @Valid @RequestBody SaveBookSelectionRequest body) {
+        photoService.appendBookSelection(bookUid, body.photoIds());
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping(value = "/book-covers", produces = MediaType.APPLICATION_JSON_VALUE)

@@ -52,8 +52,10 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
             @RequestParam(required = false) Integer offset,
             @RequestParam(required = false) String pdfStatusIn,
             @RequestParam(required = false) String createdFrom,
-            @RequestParam(required = false) String createdTo) {
-        return sweetbookApiService.listBooks(limit, offset, pdfStatusIn, createdFrom, createdTo);
+            @RequestParam(required = false) String createdTo,
+            @RequestParam(required = false, defaultValue = "false") boolean finalizedOnly) {
+        return sweetbookApiService.listBooks(
+                limit, offset, pdfStatusIn, createdFrom, createdTo, finalizedOnly);
     }
 
     @GetMapping(value = "/my-books", produces = MediaType.APPLICATION_JSON_VALUE)

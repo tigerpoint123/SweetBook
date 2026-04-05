@@ -3,6 +3,7 @@ package com.ll.backend.domain.sweetbook.service;
 import com.ll.backend.domain.photo.entity.Photo;
 import com.ll.backend.domain.photo.repository.BookCoverRepository;
 import com.ll.backend.domain.photo.repository.PhotoRepository;
+import com.ll.backend.domain.photo.repository.SelectedPhotoRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
 import com.ll.backend.domain.sweetbook.support.SweetbookCreateResponseParser;
@@ -15,12 +16,15 @@ import com.ll.backend.global.client.dto.BooksListData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.PhotoUploadOutcome;
+import com.ll.backend.global.client.dto.BookListItem;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -37,6 +41,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
     private final SweetbookApiClient sweetbookApiClient;
     private final PhotoRepository photoRepository;
     private final BookCoverRepository bookCoverRepository;
+    private final SelectedPhotoRepository selectedPhotoRepository;
     private final LocalPhotoStorage localPhotoStorage;
     private final SweetbookBookRepository sweetbookBookRepository;
 
@@ -46,16 +51,32 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
             Integer offset,
             String pdfStatusIn,
             String createdFrom,
-            String createdTo) {
+            String createdTo,
+            boolean finalizedOnly) {
         SweetbookApiEnvelope<BooksListData> envelope =
                 sweetbookApiClient.listBooks(limit, offset, pdfStatusIn, createdFrom, createdTo);
-        if (envelope == null || envelope.data() == null || envelope.data().books() != null) {
+        if (envelope == null || envelope.data() == null) {
             return envelope;
         }
         BooksListData data = envelope.data();
-        return new SweetbookApiEnvelope<>(
-                envelope.success(),
-                new BooksListData(List.of(), data.total(), data.limit(), data.offset()));
+        List<BookListItem> books = data.books();
+        if (books == null) {
+            return new SweetbookApiEnvelope<>(
+                    envelope.success(),
+                    new BooksListData(List.of(), data.total(), data.limit(), data.offset()));
+        }
+        if (finalizedOnly) {
+            Set<String> finalizedUids =
+                    sweetbookBookRepository.findAllByFinalizedAtIsNotNull().stream()
+                            .map(SweetbookBook::getBookUid)
+                            .collect(Collectors.toSet());
+            List<BookListItem> filtered =
+                    books.stream().filter(b -> finalizedUids.contains(b.bookUid())).toList();
+            return new SweetbookApiEnvelope<>(
+                    envelope.success(),
+                    new BooksListData(filtered, filtered.size(), data.limit(), data.offset()));
+        }
+        return envelope;
     }
 
     @Override
@@ -174,6 +195,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
         } catch (Exception e) {
             log.warn("로컬 사진 파일 삭제 중 오류 bookUid={} photoId={}", bookUid, photo.getId(), e);
         }
+        selectedPhotoRepository.deleteByPhotoId(photo.getId());
         photoRepository.delete(photo);
         return response;
     }

@@ -19,7 +19,8 @@ public interface SweetbookApiService {
             Integer offset,
             String pdfStatusIn,
             String createdFrom,
-            String createdTo);
+            String createdTo,
+            boolean finalizedOnly);
 
     Map<String, Object> createBook(CreateBookRequest request, Optional<Long> memberId);
 

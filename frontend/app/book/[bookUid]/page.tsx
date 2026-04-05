@@ -7,7 +7,9 @@ import { clearLoggedIn, readLoggedIn } from "@/lib/auth-storage";
 import {
   downloadLocalPhoto,
   fetchLocalPhotos,
+  fetchSelectedPhotosForBook,
   localPhotoAbsoluteUrl,
+  appendBookSelection,
   saveBookCover,
   type LocalPhotoItem,
 } from "@/lib/photo-api";
@@ -34,6 +36,8 @@ export default function BookGalleryPage() {
 
   const [loggedIn, setLoggedIn] = useState(false);
   const [localPhotos, setLocalPhotos] = useState<LocalPhotoItem[]>([]);
+  /** 책 넘김(왼쪽): selected_photo.id 오름차순 — 가장 최근 채택이 맨 뒤 페이지 */
+  const [selectedFlipPhotos, setSelectedFlipPhotos] = useState<LocalPhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sweetbookError, setSweetbookError] = useState<string | null>(null);
@@ -138,12 +142,14 @@ export default function BookGalleryPage() {
     setSweetbookError(null);
     setLocalLoadError(null);
     setLocalPhotos([]);
+    setSelectedFlipPhotos([]);
 
     async function load() {
       try {
-        const [gRes, lRes] = await Promise.all([
+        const [gRes, lRes, sRes] = await Promise.all([
           fetchBookGallery(bookUid),
           fetchLocalPhotos(bookUid),
+          fetchSelectedPhotosForBook(bookUid),
         ]);
         if (cancelled) return;
 
@@ -160,11 +166,23 @@ export default function BookGalleryPage() {
         }
         setLocalPhotos(locals);
 
+        const sText = await sRes.text();
+        let selected: LocalPhotoItem[] = [];
+        if (sRes.ok) {
+          try {
+            selected = JSON.parse(sText) as LocalPhotoItem[];
+            if (!Array.isArray(selected)) selected = [];
+          } catch {
+            /* keep [] */
+          }
+        }
+        if (!cancelled) setSelectedFlipPhotos(selected);
+
         const gText = await gRes.text();
         if (cancelled) return;
 
         if (gRes.status === 404) {
-          if (locals.length === 0) {
+          if (locals.length === 0 && selected.length === 0) {
             setError(
               gText ||
                 "로컬에 등록된 책이 아니거나 사진 이력이 없습니다. (책 생성 또는 업로드 후 이용하세요.)"
@@ -190,7 +208,7 @@ export default function BookGalleryPage() {
     };
   }, [bookUid]);
 
-  const hasLocal = localPhotos.length > 0;
+  const hasBookSection = localPhotos.length > 0 || selectedFlipPhotos.length > 0;
 
   function togglePhotoSelectMode() {
     setPhotoSelectMessage(null);
@@ -267,42 +285,84 @@ export default function BookGalleryPage() {
         .toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" })
         .slice(0, 7);
 
-      const res = await postBookContents(uid, {
-        templateUid: SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID,
-        parameters: {
-          monthYearLabel,
-          photos,
-        },
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        let detail = text || `요청 실패 (${res.status})`;
-        try {
-          const j = JSON.parse(text) as { message?: string };
-          if (j?.message) detail = j.message;
-        } catch {
-          /* keep detail */
+      let singleMsg = "책 콘텐츠가 추가되었습니다.";
+      let lastPageCount: number | undefined;
+      for (let i = 0; i < photos.length; i++) {
+        const res = await postBookContents(uid, {
+          templateUid: SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID,
+          parameters: {
+            monthYearLabel,
+            photos: [photos[i]],
+          },
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          let detail = text || `요청 실패 (${res.status})`;
+          try {
+            const j = JSON.parse(text) as { message?: string };
+            if (j?.message) detail = j.message;
+          } catch {
+            /* keep detail */
+          }
+          setPhotoSelectMessage(
+            photos.length > 1
+              ? `${i + 1}번째 사진(${photos[i]}) 콘텐츠 추가 실패: ${detail}`
+              : detail
+          );
+          return;
         }
-        setPhotoSelectMessage(detail);
+        try {
+          const j = JSON.parse(text) as AddBookContentsResponse;
+          if (photos.length === 1 && j.message) singleMsg = j.message;
+          if (j.data?.pageCount != null) lastPageCount = j.data.pageCount;
+        } catch {
+          /* keep */
+        }
+      }
+
+      let msg =
+        photos.length > 1
+          ? `${photos.length}장의 사진에 대해 콘텐츠가 추가되었습니다.`
+          : singleMsg;
+      if (lastPageCount != null) {
+        msg = `${msg} (${lastPageCount}페이지)`;
+      }
+      const idsOrdered = [...selectedPhotoIds];
+      const selRes = await appendBookSelection(uid, idsOrdered);
+      const selText = await selRes.text();
+      if (!selRes.ok) {
+        setPhotoSelectMessage(
+          `${msg}\n(책 미리보기용 채택 목록 저장 실패: ${selText || selRes.status})`
+        );
+        setPhotoSelectMode(false);
+        setSelectedPhotoIds([]);
+        await reloadSelectedPhotosForBook();
         return;
       }
-      let msg = "책 콘텐츠가 추가되었습니다.";
-      try {
-        const j = JSON.parse(text) as AddBookContentsResponse;
-        if (j.message) msg = j.message;
-        if (j.data?.pageCount != null) {
-          msg = `${msg} (${j.data.pageCount}페이지)`;
-        }
-      } catch {
-        /* keep default msg */
-      }
-      setPhotoSelectMessage(msg);
       setPhotoSelectMode(false);
       setSelectedPhotoIds([]);
+      window.location.reload();
     } catch {
       setPhotoSelectMessage("네트워크 오류로 콘텐츠를 추가할 수 없습니다.");
     } finally {
       setPhotoCompletePending(false);
+    }
+  }
+
+  async function reloadSelectedPhotosForBook() {
+    const uid = bookUid.trim();
+    if (!uid) return;
+    const sRes = await fetchSelectedPhotosForBook(uid);
+    const sText = await sRes.text();
+    if (sRes.ok) {
+      try {
+        const arr = JSON.parse(sText) as LocalPhotoItem[];
+        if (Array.isArray(arr)) {
+          setSelectedFlipPhotos(arr);
+        }
+      } catch {
+        /* 이전 목록 유지 (낙관적 갱신·파싱 실패 시 빈 화면 방지) */
+      }
     }
   }
 
@@ -318,6 +378,7 @@ export default function BookGalleryPage() {
         setLocalLoadError("로컬 사진 목록을 해석할 수 없습니다.");
       }
     }
+    await reloadSelectedPhotosForBook();
   }
 
   async function handlePhotoDeleteComplete() {
@@ -574,11 +635,18 @@ export default function BookGalleryPage() {
           </p>
         ) : null}
 
-        {!loading && !error && hasLocal ? (
+        {!loading && !error && hasBookSection ? (
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-[8fr_2fr] lg:items-start lg:gap-6">
             <div className="min-w-0">
-              <section aria-label="책 넘김 보기">
-                <BookPageFlip photos={localPhotos} expanded />
+              <section aria-label="책 넘김 보기 (사진 채택된 이미지)">
+                {selectedFlipPhotos.length > 0 ? (
+                  <BookPageFlip photos={selectedFlipPhotos} expanded />
+                ) : (
+                  <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center text-sm text-zinc-600 dark:border-zinc-600 dark:bg-zinc-900/40 dark:text-zinc-400">
+                    사진 채택으로 선택한 이미지가 없습니다. 오른쪽에서 채택 후 선택 완료를 누르면 여기
+                    책 미리보기에 표시됩니다.
+                  </div>
+                )}
               </section>
             </div>
             <aside
@@ -799,7 +867,7 @@ export default function BookGalleryPage() {
           </div>
         ) : null}
 
-        {!loading && !error && !hasLocal && !localLoadError ? (
+        {!loading && !error && !hasBookSection && !localLoadError ? (
           <p className="text-sm text-zinc-500">표시할 사진이 없습니다.</p>
         ) : null}
       </main>
