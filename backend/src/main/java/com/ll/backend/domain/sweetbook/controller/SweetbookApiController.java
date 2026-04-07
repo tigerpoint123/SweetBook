@@ -1,6 +1,7 @@
 package com.ll.backend.domain.sweetbook.controller;
 
 import com.ll.backend.domain.member.service.MemberService;
+import com.ll.backend.domain.sweetbook.dto.FinalizeBookRequest;
 import com.ll.backend.domain.sweetbook.service.SweetbookApiService;
 import com.ll.backend.domain.sweetbook.support.SweetbookCoverDefaults;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
@@ -39,7 +40,7 @@ import tools.jackson.databind.ObjectMapper;
 @RequestMapping("/api/sweetbook")
 @RequiredArgsConstructor
 @Slf4j
-public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 내가 직접 db에 url 저장해서 볼 수 있도록 해야한다.
+public class SweetbookApiController {
 
     private static final String SESSION_COOKIE_NAME = "SESSION";
 
@@ -83,9 +84,6 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
         return sweetbookApiService.createBook(body, memberId);
     }
 
-    /**
-     * Sweetbook DELETE /v1/books/{bookUid} 프록시. 세션 사용자가 해당 북 생성자일 때만 허용.
-     */
     @DeleteMapping(value = "/books/{bookUid}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> deleteBook(
             @PathVariable String bookUid,
@@ -170,10 +168,12 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
 
     @PostMapping(
             value = "/books/{bookUid}/finalization",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<?> finalizeBook(
             @PathVariable String bookUid,
+            @Valid @RequestBody FinalizeBookRequest body,
             @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -184,7 +184,7 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
         }
         try {
             Map<String, Object> result =
-                    sweetbookApiService.finalizeBook(bookUid, memberIdOpt.get());
+                    sweetbookApiService.finalizeBook(bookUid, memberIdOpt.get(), body.price());
             try {
                 log.info(
                         "finalizeBook 백엔드→클라이언트 응답 bookUid={}, body={}",
@@ -258,15 +258,6 @@ public class SweetbookApiController { // TODO : 이미지 조회 url은 없고, 
         }
     }
 
-    /**
-     * Sweetbook POST /v1/books/{bookUid}/cover 프록시 (multipart).
-     * <ul>
-     *   <li>{@code templateUid} — 생략 시 {@link SweetbookCoverDefaults#TEMPLATE_UID}</li>
-     *   <li>{@code parameters} — JSON 문자열 (예: title, author)</li>
-     *   <li>{@code coverPhoto} — 앞표지 메인(필수)</li>
-     *   <li>{@code backPhoto} — 선택(템플릿이 뒷표지 파트를 따로 요구할 때만; 일부 템플릿은 두 파트를 같은 키로 처리해 중복 오류가 남)</li>
-     * </ul>
-     */
     @PostMapping(
             value = "/books/{bookUid}/cover",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,

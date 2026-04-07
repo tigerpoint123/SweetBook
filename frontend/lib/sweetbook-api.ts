@@ -92,10 +92,15 @@ export function resolveFinalizeFailureMessage(
   return rawText.trim() !== "" ? rawText : "최종화 요청에 실패했습니다.";
 }
 
-export async function postBookFinalization(bookUid: string): Promise<Response> {
+export async function postBookFinalization(
+  bookUid: string,
+  price: number
+): Promise<Response> {
   return fetch(sweetbookBookFinalizationUrl(bookUid), {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ price }),
   });
 }
 

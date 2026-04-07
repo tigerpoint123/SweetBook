@@ -1,6 +1,5 @@
 package com.ll.backend.domain.photo.service;
 
-import com.ll.backend.domain.order.repository.OrderRepository;
 import com.ll.backend.domain.photo.dto.BookCoverItemResponse;
 import com.ll.backend.domain.photo.dto.LocalPhotoItemResponse;
 import com.ll.backend.domain.photo.dto.SaveBookCoverRequest;
@@ -12,13 +11,13 @@ import com.ll.backend.domain.photo.repository.PhotoRepository;
 import com.ll.backend.domain.photo.repository.SelectedPhotoRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
-import com.ll.backend.global.image.ImageBlurUtil;
-import com.ll.backend.global.storage.LocalPhotoStorage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -39,19 +38,37 @@ public class PhotoServiceImpl implements PhotoService {
     private final BookCoverRepository bookCoverRepository;
     private final SelectedPhotoRepository selectedPhotoRepository;
     private final SweetbookBookRepository sweetbookBookRepository;
-    private final OrderRepository orderRepository;
 
     @Value("${app.photo.upload-dir:uploads/photos}")
     private String uploadDir;
 
     @Override
     public List<LocalPhotoItemResponse> list(Optional<String> bookUid, Optional<Long> viewerMemberId) {
+        Optional<String> uidOpt = bookUid.filter(s -> !s.isBlank());
         List<Photo> photos =
-                bookUid.filter(s -> !s.isBlank())
-                        .map(photoRepository::findByBookUidOrderByIdDesc)
+                uidOpt.map(photoRepository::findByBookUidOrderByIdDesc)
                         .orElseGet(photoRepository::findAllByOrderByIdDesc);
+        if (uidOpt.isPresent()) {
+            Long bookPrice =
+                    sweetbookBookRepository
+                            .findByBookUid(uidOpt.get())
+                            .map(SweetbookBook::getPrice)
+                            .orElse(null);
+            return photos.stream().map(p -> toItem(p, bookPrice)).toList();
+        }
+        Map<String, Long> priceByBookUid = new HashMap<>();
         return photos.stream()
-                .map(p -> toItem(p, fileUrlShouldPointToBlur(p, viewerMemberId)))
+                .map(
+                        p ->
+                                toItem(
+                                        p,
+                                        priceByBookUid.computeIfAbsent(
+                                                p.getBookUid(),
+                                                u ->
+                                                        sweetbookBookRepository
+                                                                .findByBookUid(u)
+                                                                .map(SweetbookBook::getPrice)
+                                                                .orElse(null))))
                 .toList();
     }
 
@@ -62,8 +79,10 @@ public class PhotoServiceImpl implements PhotoService {
         if (uid.isEmpty()) {
             return List.of();
         }
+        Long bookPrice =
+                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
         return photoRepository.findSamplesByBookUidOrderByIdAsc(uid).stream()
-                .map(p -> toItem(p, false))
+                .map(p -> toItem(p, bookPrice))
                 .toList();
     }
 
@@ -74,8 +93,10 @@ public class PhotoServiceImpl implements PhotoService {
         if (uid.isEmpty()) {
             return List.of();
         }
+        Long bookPrice =
+                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
         return photoRepository.findNonSamplesByBookUidOrderByIdDesc(uid).stream()
-                .map(p -> toItem(p, fileUrlShouldPointToBlur(p, viewerMemberId)))
+                .map(p -> toItem(p, bookPrice))
                 .toList();
     }
 
@@ -86,11 +107,15 @@ public class PhotoServiceImpl implements PhotoService {
         if (uid.isEmpty()) {
             return List.of();
         }
+        Long bookPrice =
+                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
         List<LocalPhotoItemResponse> out = new ArrayList<>();
         for (SelectedPhoto sp : selectedPhotoRepository.findAllByBookUidOrderByIdAsc(uid)) {
             photoRepository
                     .findById(sp.getPhotoId())
-                    .ifPresent(p -> out.add(toItem(p, fileUrlShouldPointToBlur(p, viewerMemberId))));
+                    .ifPresent(
+                            p ->
+                                    out.add(toItem(p, bookPrice)));
         }
         return out;
     }
@@ -110,35 +135,6 @@ public class PhotoServiceImpl implements PhotoService {
                 photoRepository.save(p);
             }
         }
-    }
-
-    /**
-     * 목록·썸네일용 {@code fileUrl}: 소유자·구매자는 항상 {@code /file}. 그 외에는 {@code is_sample=false} 인 사진만
-     * {@code /blur}({@code blurLocalPath} 바이너리), 샘플 3장은 미리보기용 {@code /file}.
-     */
-    private boolean fileUrlShouldPointToBlur(Photo p, Optional<Long> viewerMemberId) {
-        if (!listShouldUseBlurFileUrl(p.getBookUid(), viewerMemberId)) {
-            return false;
-        }
-        return !p.isSample();
-    }
-
-    /**
-     * 비로그인, 또는 해당 북 소유자가 아니면서 {@code book_order} 구매 기록도 없으면 “제한된 조회자”로 간주합니다.
-     */
-    private boolean listShouldUseBlurFileUrl(String photoBookUid, Optional<Long> viewerMemberId) {
-        if (photoBookUid == null || photoBookUid.isBlank()) {
-            return true;
-        }
-        String uid = photoBookUid.trim();
-        if (viewerMemberId.isEmpty()) {
-            return true;
-        }
-        long mid = viewerMemberId.get();
-        if (sweetbookBookRepository.existsByBookUidAndMemberId(uid, mid)) {
-            return false;
-        }
-        return !orderRepository.existsByMemberIdAndBookUid(mid, uid);
     }
 
     @Override
@@ -168,35 +164,12 @@ public class PhotoServiceImpl implements PhotoService {
 
     @Override
     public ServedPhoto servePhoto(long id, Optional<Long> memberId) {
-        Photo photo = loadPhotoOrThrow(id);
-        Path path = resolvePathForViewer(photo, memberId);
-        return buildServed(photo, path);
+        return serveOriginalFile(loadPhotoOrThrow(id));
     }
 
-    @Override
-    public ServedPhoto servePhotoOriginal(long id, Optional<Long> memberId) {
-        Photo photo = loadPhotoOrThrow(id);
-        if (!canAccessOriginalBinary(photo, memberId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "원본 이미지에 접근할 권한이 없습니다.");
-        }
+    private ServedPhoto serveOriginalFile(Photo photo) {
         Path path = Paths.get(photo.getLocalPath()).normalize();
         validateUnderRoot(path);
-        return buildServed(photo, path);
-    }
-
-    @Override
-    public ServedPhoto servePhotoBlur(long id) {
-        Photo photo = loadPhotoOrThrow(id);
-        ensureBlurVariantOnDisk(photo);
-        String blur = photo.getBlurLocalPath();
-        if (blur == null || blur.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "blur image missing");
-        }
-        Path path = Paths.get(blur).normalize();
-        validateUnderRoot(path);
-        if (!Files.isRegularFile(path)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "blur file missing");
-        }
         return buildServed(photo, path);
     }
 
@@ -204,100 +177,6 @@ public class PhotoServiceImpl implements PhotoService {
         return photoRepository
                 .findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "photo not found"));
-    }
-
-    private Path resolvePathForViewer(Photo photo, Optional<Long> memberId) {
-        Optional<SweetbookBook> bookOpt = sweetbookBookRepository.findByBookUid(photo.getBookUid());
-        if (shouldServeOriginalForFileEndpoint(photo, memberId, bookOpt)) {
-            Path p = Paths.get(photo.getLocalPath()).normalize();
-            validateUnderRoot(p);
-            return p;
-        }
-        ensureBlurVariantOnDisk(photo);
-        String blur = photo.getBlurLocalPath();
-        if (blur == null || blur.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "blur image missing");
-        }
-        Path bp = Paths.get(blur).normalize();
-        validateUnderRoot(bp);
-        if (!Files.isRegularFile(bp)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "blur file missing");
-        }
-        return bp;
-    }
-
-    /** {@code GET .../file} — 최종화 전·후 공통: 샘플·소유자·구매자만 원본, 그 외 비샘플은 블러 경로로 유도. */
-    private boolean shouldServeOriginalForFileEndpoint(
-            Photo photo, Optional<Long> memberId, Optional<SweetbookBook> bookOpt) {
-        if (photo.isSample()) {
-            return true;
-        }
-        if (memberId.isEmpty()) {
-            return false;
-        }
-        long mid = memberId.get();
-        boolean owner =
-                bookOpt.map(b -> b.getMemberId().equals(mid)).orElse(false);
-        if (owner) {
-            return true;
-        }
-        return orderRepository.existsByMemberIdAndBookUid(mid, photo.getBookUid());
-    }
-
-    private boolean canAccessOriginalBinary(Photo photo, Optional<Long> memberId) {
-        Optional<SweetbookBook> bookOpt = sweetbookBookRepository.findByBookUid(photo.getBookUid());
-        boolean finalized = bookOpt.map(b -> b.getFinalizedAt() != null).orElse(false);
-        if (!finalized) {
-            return true;
-        }
-        if (photo.isSample()) {
-            return true;
-        }
-        if (memberId.isEmpty()) {
-            return false;
-        }
-        long mid = memberId.get();
-        boolean owner = bookOpt.map(b -> b.getMemberId().equals(mid)).orElse(false);
-        if (owner) {
-            return true;
-        }
-        return orderRepository.existsByMemberIdAndBookUid(mid, photo.getBookUid());
-    }
-
-    private void ensureBlurVariantOnDisk(Photo photo) {
-        if (photo.getBlurLocalPath() != null && !photo.getBlurLocalPath().isBlank()) {
-            if (Files.isRegularFile(Paths.get(photo.getBlurLocalPath()))) {
-                return;
-            }
-        }
-        Path orig = Paths.get(photo.getLocalPath()).normalize();
-        if (!Files.isRegularFile(orig)) {
-            return;
-        }
-        Path blurTarget = resolveBlurTargetPath(orig).normalize();
-        try {
-            Files.createDirectories(blurTarget.getParent());
-            ImageBlurUtil.blurToFileOrCopy(orig, blurTarget);
-            photo.setBlurLocalPath(blurTarget.toAbsolutePath().toString().replace('\\', '/'));
-            photoRepository.save(photo);
-        } catch (Exception e) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR, "블러 이미지를 준비할 수 없습니다.");
-        }
-    }
-
-    static Path resolveBlurTargetPath(Path originalFile) {
-        Path parent = originalFile.getParent();
-        if (parent == null) {
-            return originalFile.resolveSibling(LocalPhotoStorage.SUBDIR_BLUR)
-                    .resolve(originalFile.getFileName());
-        }
-        if (LocalPhotoStorage.SUBDIR_ORIGINAL.equals(parent.getFileName().toString())) {
-            return parent.getParent()
-                    .resolve(LocalPhotoStorage.SUBDIR_BLUR)
-                    .resolve(originalFile.getFileName());
-        }
-        return parent.resolve(LocalPhotoStorage.SUBDIR_BLUR).resolve(originalFile.getFileName());
     }
 
     private void validateUnderRoot(Path path) {
@@ -360,12 +239,9 @@ public class PhotoServiceImpl implements PhotoService {
                                 .build()));
     }
 
-    private LocalPhotoItemResponse toItem(Photo p, boolean fileUrlPointsToBlur) {
+    private LocalPhotoItemResponse toItem(Photo p, Long bookPrice) {
         long id = p.getId();
-        String fileUrl =
-                fileUrlPointsToBlur
-                        ? "/api/photos/" + id + "/blur"
-                        : "/api/photos/" + id + "/file";
+        String fileUrl = "/api/photos/" + id + "/file";
         return new LocalPhotoItemResponse(
                 p.getId(),
                 p.getBookUid(),
@@ -378,8 +254,8 @@ public class PhotoServiceImpl implements PhotoService {
                 p.isDuplicate(),
                 fileUrl,
                 p.isSample(),
-                nonBlankOrDefault(p.getOriginalUrl(), "/api/photos/" + id + "/original"),
-                nonBlankOrDefault(p.getBlurUrl(), "/api/photos/" + id + "/blur"));
+                bookPrice,
+                nonBlankOrDefault(p.getOriginalUrl(), fileUrl));
     }
 
     private static String nonBlankOrDefault(String v, String def) {

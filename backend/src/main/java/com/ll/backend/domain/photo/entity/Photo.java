@@ -26,7 +26,7 @@ public class Photo {
     /** 원본 파일 절대 경로 ({@code .../bookUid/original/...}) */
     private String localPath;
 
-    /** 블러 처리본 절대 경로 ({@code .../bookUid/blur/...}) */
+    /** 과거 블러 복제본 경로(더 이상 생성하지 않음, 기존 행 호환용). */
     @Column(length = 2048)
     private String blurLocalPath;
 
@@ -85,10 +85,7 @@ public class Photo {
             return;
         }
         if (this.originalUrl == null || this.originalUrl.isBlank()) {
-            this.originalUrl = "/api/photos/" + this.id + "/original";
-        }
-        if (this.blurUrl == null || this.blurUrl.isBlank()) {
-            this.blurUrl = "/api/photos/" + this.id + "/blur";
+            this.originalUrl = "/api/photos/" + this.id + "/file";
         }
     }
 }

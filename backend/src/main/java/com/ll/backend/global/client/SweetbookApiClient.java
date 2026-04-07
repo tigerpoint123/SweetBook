@@ -3,11 +3,17 @@ package com.ll.backend.global.client;
 import com.ll.backend.global.client.dto.AddBookContentsRequest;
 import com.ll.backend.global.client.dto.BookPhotosData;
 import com.ll.backend.global.client.dto.BooksListData;
+import com.ll.backend.global.client.dto.CreditBalanceData;
+import com.ll.backend.global.client.dto.CreditChargeData;
+import com.ll.backend.global.client.dto.CreditTransactionsData;
 import com.ll.backend.global.client.dto.CreateBookRequest;
 import com.ll.backend.global.client.dto.PhotoUploadData;
 import com.ll.backend.global.client.dto.PhotoUploadOutcome;
 import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.SweetbookApiResponse;
+import com.ll.backend.global.dto.SavedPaths;
 import com.ll.backend.global.storage.LocalPhotoStorage;
+import lombok.RequiredArgsConstructor;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
@@ -34,40 +40,16 @@ import org.springframework.web.util.UriBuilder;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class SweetbookApiClient {
     private final WebClient sweetbookWebClient;
     private final LocalPhotoStorage localPhotoStorage;
     private final ObjectMapper objectMapper;
-    private final String contentsTemplateUid;
-    private final String contentsBreakBefore;
 
-    public SweetbookApiClient(
-            WebClient sweetbookWebClient,
-            LocalPhotoStorage localPhotoStorage,
-            ObjectMapper objectMapper,
-            @Value("${sweetbook.contents.template-uid:1vuzMfUnCkXS}") String contentsTemplateUid,
-            @Value("${sweetbook.contents.break-before:page}") String contentsBreakBefore) {
-        this.sweetbookWebClient = sweetbookWebClient;
-        this.localPhotoStorage = localPhotoStorage;
-        this.objectMapper = objectMapper;
-        this.contentsTemplateUid = contentsTemplateUid;
-        this.contentsBreakBefore = contentsBreakBefore;
-    }
-
-    private void logSweetbookServerResponse(String operation, String context, Object responseBody) {
-        try {
-            String json =
-                    responseBody == null ? "null" : objectMapper.writeValueAsString(responseBody);
-            log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, json);
-        } catch (Exception e) {
-            log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, String.valueOf(responseBody));
-        }
-    }
-
-    private void logSweetbookServerResponseRaw(String operation, String context, String rawBody) {
-        String display = (rawBody == null || rawBody.isBlank()) ? "(empty)" : rawBody;
-        log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, display);
-    }
+    @Value("${sweetbook.contents.template-uid}")
+    private String contentsTemplateUid;
+    @Value("${sweetbook.contents.break-before}")
+    private String contentsBreakBefore;
 
     public SweetbookApiEnvelope<BooksListData> listBooks(
             Integer limit,
@@ -75,6 +57,8 @@ public class SweetbookApiClient {
             String pdfStatusIn,
             String createdFrom,
             String createdTo) {
+        URI uri = buildBooksListUri(new org.springframework.web.util.DefaultUriBuilderFactory().builder(), limit, offset, pdfStatusIn, createdFrom, createdTo);
+        logSweetbookRequest("listBooks", "GET", uri.toString(), null);
         try {
             SweetbookApiEnvelope<BooksListData> body = sweetbookWebClient.get()
                     .uri(uriBuilder -> buildBooksListUri(uriBuilder, limit, offset, pdfStatusIn, createdFrom, createdTo))
@@ -92,34 +76,8 @@ public class SweetbookApiClient {
         }
     }
 
-    private static URI buildBooksListUri(
-            UriBuilder uriBuilder,
-            Integer limit,
-            Integer offset,
-            String pdfStatusIn,
-            String createdFrom,
-            String createdTo) {
-        UriBuilder b = uriBuilder.path("/books");
-        if (limit != null) {
-            int clamped = Math.min(100, Math.max(1, limit));
-            b.queryParam("limit", clamped);
-        }
-        if (offset != null) {
-            b.queryParam("offset", offset);
-        }
-        if (StringUtils.hasText(pdfStatusIn)) {
-            b.queryParam("pdfStatusIn", pdfStatusIn);
-        }
-        if (StringUtils.hasText(createdFrom)) {
-            b.queryParam("createdFrom", createdFrom);
-        }
-        if (StringUtils.hasText(createdTo)) {
-            b.queryParam("createdTo", createdTo);
-        }
-        return b.build();
-    }
-
     public Map<String, Object> createBook(CreateBookRequest request) {
+        logSweetbookRequest("createBook", "POST", "/books", request);
         try {
             WebClient.RequestHeadersSpec<?> spec = sweetbookWebClient.post()
                     .uri("/books")
@@ -140,8 +98,240 @@ public class SweetbookApiClient {
         }
     }
 
+    /** Sweetbook POST /v1/orders */
+    public Map<String, Object> createOrder(Map<String, Object> requestBody) {
+        Objects.requireNonNull(requestBody, "requestBody");
+        logSweetbookRequest("createOrder", "POST", "/orders", requestBody);
+        try {
+            Map<String, Object> body = sweetbookWebClient.post()
+                    .uri("/orders")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("createOrder", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook createOrder 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    public SweetbookApiResponse<CreditChargeData> chargeSandboxCredit(Map<String, Object> requestBody) {
+        Objects.requireNonNull(requestBody, "requestBody");
+        logSweetbookRequest("chargeSandboxCredit", "POST", "/credits/sandbox/charge", requestBody);
+        try {
+            SweetbookApiResponse<CreditChargeData> body = sweetbookWebClient.post()
+                    .uri("/credits/sandbox/charge")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<SweetbookApiResponse<CreditChargeData>>() {})
+                    .block();
+            SweetbookApiResponse<CreditChargeData> safe =
+                    body != null ? body : new SweetbookApiResponse<>(false, null, null);
+            logSweetbookServerResponse("chargeSandboxCredit", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook chargeSandboxCredit 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook GET /v1/credits */
+    public SweetbookApiResponse<CreditBalanceData> getCredits() {
+        logSweetbookRequest("getCredits", "GET", "/credits", null);
+        try {
+            SweetbookApiResponse<CreditBalanceData> body = sweetbookWebClient.get()
+                    .uri("/credits")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<SweetbookApiResponse<CreditBalanceData>>() {})
+                    .block();
+            SweetbookApiResponse<CreditBalanceData> safe =
+                    body != null ? body : new SweetbookApiResponse<>(false, null, null);
+            logSweetbookServerResponse("getCredits", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook getCredits 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook GET /v1/credits/transactions */
+    public SweetbookApiResponse<CreditTransactionsData> getCreditTransactions(int limit, int offset) {
+        int lim = Math.min(Math.max(limit, 1), 100);
+        int off = Math.max(offset, 0);
+        logSweetbookRequest(
+                "getCreditTransactions",
+                "GET",
+                "/credits/transactions?limit=" + lim + "&offset=" + off,
+                null);
+        try {
+            SweetbookApiResponse<CreditTransactionsData> body = sweetbookWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/credits/transactions")
+                            .queryParam("limit", lim)
+                            .queryParam("offset", off)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<SweetbookApiResponse<CreditTransactionsData>>() {})
+                    .block();
+            SweetbookApiResponse<CreditTransactionsData> safe =
+                    body != null ? body : new SweetbookApiResponse<>(false, null, null);
+            logSweetbookServerResponse("getCreditTransactions", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook getCreditTransactions 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook GET /v1/orders */
+    public Map<String, Object> getOrders(int limit, int offset) {
+        int lim = Math.min(Math.max(limit, 1), 100);
+        int off = Math.max(offset, 0);
+        logSweetbookRequest(
+                "getOrders",
+                "GET",
+                "/orders?limit=" + lim + "&offset=" + off,
+                null);
+        try {
+            Map<String, Object> body = sweetbookWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/orders")
+                            .queryParam("limit", lim)
+                            .queryParam("offset", off)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("getOrders", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook getOrders 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook GET /v1/orders/{orderUid} */
+    public Map<String, Object> getOrderDetail(String orderUid) {
+        Objects.requireNonNull(orderUid, "orderUid");
+        String uid = orderUid.trim();
+        if (uid.isEmpty()) {
+            throw new IllegalArgumentException("orderUid is blank");
+        }
+        logSweetbookRequest("getOrderDetail", "GET", "/orders/" + uid, null);
+        try {
+            Map<String, Object> body = sweetbookWebClient.get()
+                    .uri("/orders/{orderUid}", uid)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("getOrderDetail", "orderUid=" + uid, safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook getOrderDetail 실패 orderUid={} status={} 서버응답body={}",
+                    uid,
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook POST /v1/orders/{orderUid}/cancel */
+    public Map<String, Object> cancelOrder(String orderUid, String reason) {
+        Objects.requireNonNull(orderUid, "orderUid");
+        String uid = orderUid.trim();
+        if (uid.isEmpty()) {
+            throw new IllegalArgumentException("orderUid is blank");
+        }
+        String reasonText = reason == null ? "" : reason.trim();
+        Map<String, String> cancelBody = Map.of("CancelReason", reasonText);
+        logSweetbookRequest(
+                "cancelOrder",
+                "POST",
+                "/orders/" + uid + "/cancel",
+                cancelBody);
+        try {
+            Map<String, Object> body = sweetbookWebClient.post()
+                    .uri("/orders/{orderUid}/cancel", uid)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(cancelBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("cancelOrder", "orderUid=" + uid, safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook cancelOrder 실패 orderUid={} status={} 서버응답body={}",
+                    uid,
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
+    /** Sweetbook PATCH /v1/orders/{orderUid}/shipping */
+    public Map<String, Object> updateOrderShipping(
+            String orderUid, String recipientName, String address1) {
+        Objects.requireNonNull(orderUid, "orderUid");
+        String uid = orderUid.trim();
+        if (uid.isEmpty()) {
+            throw new IllegalArgumentException("orderUid is blank");
+        }
+        String name = recipientName == null ? "" : recipientName.trim();
+        String addr = address1 == null ? "" : address1.trim();
+        logSweetbookRequest(
+                "updateOrderShipping",
+                "PATCH",
+                "/orders/" + uid + "/shipping",
+                Map.of("recipientName", name, "address1", addr));
+        try {
+            Map<String, Object> body = sweetbookWebClient.patch()
+                    .uri("/orders/{orderUid}/shipping", uid)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("recipientName", name, "address1", addr))
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("updateOrderShipping", "orderUid=" + uid, safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook updateOrderShipping 실패 orderUid={} status={} 서버응답body={}",
+                    uid,
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
     public Map<String, Object> deleteBook(String bookUid) {
         Objects.requireNonNull(bookUid, "bookUid");
+        logSweetbookRequest("deleteBook", "DELETE", "/books/" + bookUid, null);
         try {
             Map<String, Object> body = sweetbookWebClient.delete()
                     .uri("/books/{bookUid}", bookUid)
@@ -164,6 +354,7 @@ public class SweetbookApiClient {
     /** Sweetbook POST /v1/books/{bookUid}/finalization */
     public Map<String, Object> finalizeBook(String bookUid) {
         Objects.requireNonNull(bookUid, "bookUid");
+        logSweetbookRequest("finalizeBook", "POST", "/books/" + bookUid + "/finalization", null);
         try {
             Map<String, Object> body = sweetbookWebClient.post()
                     .uri("/books/{bookUid}/finalization", bookUid)
@@ -183,6 +374,30 @@ public class SweetbookApiClient {
         }
     }
 
+    /** Sweetbook POST /v1/orders/estimate */
+    public Map<String, Object> estimateOrder(Map<String, Object> requestBody) {
+        Objects.requireNonNull(requestBody, "requestBody");
+        logSweetbookRequest("estimateOrder", "POST", "/orders/estimate", requestBody);
+        try {
+            Map<String, Object> body = sweetbookWebClient.post()
+                    .uri("/orders/estimate")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .block();
+            Map<String, Object> safe = body != null ? body : Map.of();
+            logSweetbookServerResponse("estimateOrder", "", safe);
+            return safe;
+        } catch (WebClientResponseException e) {
+            log.error(
+                    "Sweetbook estimateOrder 실패 status={} 서버응답body={}",
+                    e.getStatusCode().value(),
+                    e.getResponseBodyAsString());
+            throw e;
+        }
+    }
+
     /** Sweetbook DELETE /v1/books/{bookUid}/photos/{fileName} */
     public Map<String, Object> deleteBookPhoto(String bookUid, String fileName) {
         Objects.requireNonNull(bookUid, "bookUid");
@@ -192,6 +407,7 @@ public class SweetbookApiClient {
             throw new IllegalArgumentException("fileName is blank");
         }
         String ctx = "bookUid=" + bookUid + " fileName=" + name;
+        logSweetbookRequest("deleteBookPhoto", "DELETE", "/books/" + bookUid + "/photos/" + name, null);
         try {
             String raw = sweetbookWebClient.delete()
                     .uri("/books/{bookUid}/photos/{fileName}", bookUid, name)
@@ -221,6 +437,7 @@ public class SweetbookApiClient {
 
     public SweetbookApiEnvelope<BookPhotosData> getBookPhotos(String bookUid) {
         Objects.requireNonNull(bookUid, "bookUid");
+        logSweetbookRequest("getBookPhotos", "GET", "/books/" + bookUid + "/photos", null);
         try {
             SweetbookApiEnvelope<BookPhotosData> response = sweetbookWebClient.get()
                     .uri("/books/{bookUid}/photos", bookUid)
@@ -280,13 +497,11 @@ public class SweetbookApiClient {
             logSweetbookServerResponse("uploadPhoto", "bookUid=" + bookUid, response);
 
             String originalPath = null;
-            String blurPath = null;
             if (response != null && response.success() && response.data() != null) {
-                LocalPhotoStorage.SavedPaths paths = saveUploadedPhotoLocally(bookUid, bytes, filename);
+                SavedPaths paths = saveUploadedPhotoLocally(bookUid, bytes, filename);
                 originalPath = paths.originalAbsolutePath();
-                blurPath = paths.blurAbsolutePath();
             }
-            return new PhotoUploadOutcome(response, originalPath, blurPath);
+            return new PhotoUploadOutcome(response, originalPath);
         } catch (WebClientResponseException e) {
             log.error(
                     "Sweetbook uploadPhoto 실패 bookUid={} status={} 서버응답body={}",
@@ -425,11 +640,67 @@ public class SweetbookApiClient {
         }
     }
 
+    private void logSweetbookServerResponse(String operation, String context, Object responseBody) {
+        try {
+            String json =
+                    responseBody == null ? "null" : objectMapper.writeValueAsString(responseBody);
+            log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, json);
+        } catch (Exception e) {
+            log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, String.valueOf(responseBody));
+        }
+    }
+
+    private void logSweetbookServerResponseRaw(String operation, String context, String rawBody) {
+        String display = (rawBody == null || rawBody.isBlank()) ? "(empty)" : rawBody;
+        log.info("Sweetbook 서버 응답 {} {} body={}", operation, context, display);
+    }
+
+    private void logSweetbookRequest(String operation, String method, String path, Object requestBody) {
+        String bodyText;
+        if (requestBody == null) {
+            bodyText = "(none)";
+        } else {
+            try {
+                bodyText = objectMapper.writeValueAsString(requestBody);
+            } catch (Exception e) {
+                bodyText = String.valueOf(requestBody);
+            }
+        }
+        log.info("Sweetbook 요청 {} method={} path={} body={}", operation, method, path, bodyText);
+    }
+
+    private static URI buildBooksListUri(
+            UriBuilder uriBuilder,
+            Integer limit,
+            Integer offset,
+            String pdfStatusIn,
+            String createdFrom,
+            String createdTo) {
+        UriBuilder b = uriBuilder.path("/books");
+        if (limit != null) {
+            int clamped = Math.min(100, Math.max(1, limit));
+            b.queryParam("limit", clamped);
+        }
+        if (offset != null) {
+            b.queryParam("offset", offset);
+        }
+        if (StringUtils.hasText(pdfStatusIn)) {
+            b.queryParam("pdfStatusIn", pdfStatusIn);
+        }
+        if (StringUtils.hasText(createdFrom)) {
+            b.queryParam("createdFrom", createdFrom);
+        }
+        if (StringUtils.hasText(createdTo)) {
+            b.queryParam("createdTo", createdTo);
+        }
+        return b.build();
+    }
+
     private static String filenameOrDefault(String original, String fallback) {
         return (original != null && !original.isBlank()) ? original : fallback;
     }
 
-    private LocalPhotoStorage.SavedPaths saveUploadedPhotoLocally(
+    private SavedPaths saveUploadedPhotoLocally(
             String bookUid, byte[] bytes, String originalFilename) {
         return localPhotoStorage.save(bookUid, bytes, originalFilename);
     }

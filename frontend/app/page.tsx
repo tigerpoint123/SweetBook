@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BookCoverTile } from "@/components/BookCoverTile";
-import { clearLoggedIn, readLoggedIn } from "@/lib/auth-storage";
+import { readLoggedIn } from "@/lib/auth-storage";
 import {
   fetchBookCovers,
   fetchLocalPhotos,
@@ -19,7 +18,6 @@ import {
 } from "@/lib/sweetbook-api";
 
 export default function HomePage() {
-  const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
   const [booksEnvelope, setBooksEnvelope] = useState<BooksListEnvelope | null>(null);
   const [bookCovers, setBookCovers] = useState<BookCoverItem[]>([]);
@@ -35,7 +33,7 @@ export default function HomePage() {
     let cancelled = false;
     setBooksLoading(true);
     setBooksError(null);
-    fetchBooksList({ limit: 48, offset: 0, finalizedOnly: true })
+    fetchBooksList({ limit: 48, offset: 0 })
       .then(async (res) => {
         const text = await res.text();
         if (cancelled) return;
@@ -110,69 +108,20 @@ export default function HomePage() {
     return applySavedBookCoverUrls(base, bookCovers);
   }, [booksEnvelope, bookCovers, localPhotos]);
 
-  function handleLogout() {
-    clearLoggedIn();
-    setLoggedIn(false);
-    router.refresh();
-  }
-
   const books = booksEnvelope?.success ? (booksEnvelope.data?.books ?? []) : [];
 
   return (
     <div className="min-h-screen">
-      <header className="flex justify-end gap-3 p-4">
-        {loggedIn ? (
-          <>
-            <Link
-              href="/create-book"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-            >
-              책 생성
-            </Link>
-            <Link
-              href="/my"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-            >
-              내 정보
-            </Link>
-            <Link
-              href="/my-books"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-            >
-              책 관리
-            </Link>
-            <Link
-              href="/upload"
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              업로드
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="text-sm hover:underline"
-            >
-              로그아웃
-            </button>
-          </>
-        ) : (
-          <>
-            <Link href="/login" className="hover:underline">
-              로그인
-            </Link>
-            <Link href="/signup" className="hover:underline">
-              회원가입
-            </Link>
-          </>
-        )}
-      </header>
-
-      <main className="mx-auto flex min-h-[calc(100vh-64px)] max-w-4xl flex-col gap-8 px-4 py-10">
+      <main className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-10">
         <div className="text-center">
           <h1 className="text-2xl font-semibold">Make Your Cosplayer Book</h1>
           {loggedIn ? (
             <p className="mt-2 text-sm text-zinc-500">
-              사진을 올리려면 상단의 업로드를 누르세요.
+              사진을 올리려면{" "}
+              <Link href="/my-books" className="underline">
+                책 관리
+              </Link>
+              에서 책을 연 뒤 「사진 업로드」를 이용하세요.
             </p>
           ) : null}
         </div>

@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { clearLoggedIn, readLoggedIn } from "@/lib/auth-storage";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { readLoggedIn } from "@/lib/auth-storage";
 import {
   downloadLocalPhoto,
-  fetchBookLocalPhotosSplit,
+  fetchLocalPhotos,
   fetchSelectedPhotosForBook,
   localPhotoAbsoluteUrl,
   appendBookSelection,
@@ -17,6 +17,7 @@ import { BookPageFlip } from "@/components/BookPageFlip";
 import {
   deleteBookPhoto,
   fetchBookGallery,
+  fetchBookPhotos,
   fetchMyBookEntries,
   postBookContents,
   postBookFinalization,
@@ -24,6 +25,8 @@ import {
   SWEETBOOK_DEFAULT_CONTENTS_TEMPLATE_UID,
   uploadBookCover,
   type AddBookContentsResponse,
+  type BookGalleryData,
+  type BookPhotosEnvelope,
   type FinalizeBookResponse,
   type MyBookEntry,
   type UploadBookCoverResponse,
@@ -31,7 +34,6 @@ import {
 
 export default function BookGalleryPage() {
   const params = useParams();
-  const router = useRouter();
   const bookUid = typeof params.bookUid === "string" ? params.bookUid : "";
 
   const [loggedIn, setLoggedIn] = useState(false);
@@ -62,6 +64,86 @@ export default function BookGalleryPage() {
   /** 최종화 실패(예: 최소 페이지 미달) 시 경고 스타일 */
   const [finalizeBannerIsError, setFinalizeBannerIsError] = useState(false);
   const [finalizePending, setFinalizePending] = useState(false);
+  /** 갤러리 API 기준 최종화 여부(비소유자·비로그인 포함) */
+  const [galleryFinalized, setGalleryFinalized] = useState(false);
+
+  async function loadUploadedPhotosViaSweetbook(
+    uid: string
+  ): Promise<{ photos: LocalPhotoItem[]; errorMessage: string | null }> {
+    const [swRes, localRes] = await Promise.all([
+      fetchBookPhotos(uid),
+      fetchLocalPhotos(uid),
+    ]);
+    const swText = await swRes.text();
+    const localText = await localRes.text();
+
+    if (!swRes.ok) {
+      return {
+        photos: [],
+        errorMessage: swText || `스윗북 사진 목록 조회 실패 (${swRes.status})`,
+      };
+    }
+
+    let swRows:
+      | {
+          fileName: string;
+          originalName: string;
+          size: number;
+          mimeType: string;
+          uploadedAt: string;
+          hash: string;
+        }[]
+      | null = null;
+    try {
+      const env = JSON.parse(swText) as BookPhotosEnvelope;
+      swRows = Array.isArray(env?.data?.photos) ? env.data.photos : [];
+    } catch {
+      return { photos: [], errorMessage: "스윗북 사진 목록 응답을 해석할 수 없습니다." };
+    }
+
+    let localRows: LocalPhotoItem[] = [];
+    if (localRes.ok) {
+      try {
+        const parsed = JSON.parse(localText) as LocalPhotoItem[];
+        localRows = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        // keep []
+      }
+    }
+
+    const bySweetbookFileName = new Map(
+      localRows
+        .filter((p) => typeof p.sweetbookFileName === "string" && p.sweetbookFileName.trim() !== "")
+        .map((p) => [p.sweetbookFileName.trim(), p] as const)
+    );
+
+    const photos = swRows
+      .map((r, idx) => {
+        const local = bySweetbookFileName.get(r.fileName.trim());
+        if (!local) return null;
+        return {
+          ...local,
+          id: local.id ?? idx + 1,
+          bookUid: uid,
+          sweetbookFileName: r.fileName,
+          originalName: r.originalName ?? local.originalName,
+          size: Number.isFinite(r.size) ? r.size : local.size,
+          mimeType: r.mimeType ?? local.mimeType,
+          uploadedAt: r.uploadedAt ?? local.uploadedAt,
+          hash: r.hash ?? local.hash,
+        } satisfies LocalPhotoItem;
+      })
+      .filter((p): p is LocalPhotoItem => p !== null);
+
+    const missingCount = swRows.length - photos.length;
+    if (missingCount > 0) {
+      return {
+        photos,
+        errorMessage: `스윗북 사진 ${missingCount}장은 로컬 메타데이터가 없어 목록에서 제외되었습니다.`,
+      };
+    }
+    return { photos, errorMessage: null };
+  }
 
   useEffect(() => {
     setLoggedIn(readLoggedIn());
@@ -143,23 +225,19 @@ export default function BookGalleryPage() {
     setLocalLoadError(null);
     setLocalPhotos([]);
     setSelectedFlipPhotos([]);
+    setGalleryFinalized(false);
 
     async function load() {
       try {
-        const [gRes, localSplit, sRes] = await Promise.all([
+        const [gRes, swPhotos, sRes] = await Promise.all([
           fetchBookGallery(bookUid),
-          fetchBookLocalPhotosSplit(bookUid),
+          loadUploadedPhotosViaSweetbook(bookUid),
           fetchSelectedPhotosForBook(bookUid),
         ]);
         if (cancelled) return;
 
-        let locals: LocalPhotoItem[] = [];
-        if (localSplit.ok) {
-          locals = localSplit.photos;
-          setLocalLoadError(null);
-        } else {
-          setLocalLoadError(localSplit.errorMessage ?? "로컬 사진 목록을 불러오지 못했습니다.");
-        }
+        const locals = swPhotos.photos;
+        setLocalLoadError(swPhotos.errorMessage);
         setLocalPhotos(locals);
 
         const sText = await sRes.text();
@@ -188,6 +266,16 @@ export default function BookGalleryPage() {
         }
         if (!gRes.ok) {
           setSweetbookError(gText || `사진 목록 확인 실패 (${gRes.status})`);
+          setGalleryFinalized(false);
+        } else {
+          try {
+            const env = JSON.parse(gText) as {
+              data?: BookGalleryData;
+            };
+            setGalleryFinalized(env.data?.finalized === true);
+          } catch {
+            setGalleryFinalized(false);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -365,13 +453,9 @@ export default function BookGalleryPage() {
   async function reloadLocalPhotosForBook() {
     const uid = bookUid.trim();
     if (!uid) return;
-    const split = await fetchBookLocalPhotosSplit(uid);
-    if (split.ok) {
-      setLocalPhotos(split.photos);
-      setLocalLoadError(null);
-    } else {
-      setLocalLoadError(split.errorMessage ?? "로컬 사진 목록을 불러오지 못했습니다.");
-    }
+    const loaded = await loadUploadedPhotosViaSweetbook(uid);
+    setLocalPhotos(loaded.photos);
+    setLocalLoadError(loaded.errorMessage);
     await reloadSelectedPhotosForBook();
   }
 
@@ -497,21 +581,38 @@ export default function BookGalleryPage() {
     }
   }
 
-  function handleLogout() {
-    clearLoggedIn();
-    setLoggedIn(false);
-    router.refresh();
-  }
-
   const ownerMayEditPhotos = isOwnerOfThisBook && !bookFinalized;
+  const showPurchaseCta =
+    galleryFinalized && hasBookSection && !isOwnerOfThisBook;
+  const purchasePagePath =
+    bookUid.trim() === ""
+      ? ""
+      : `/book/${encodeURIComponent(bookUid.trim())}/purchase`;
+  const purchaseButtonHref =
+    !purchasePagePath
+      ? "/login"
+      : loggedIn
+        ? purchasePagePath
+        : `/login?next=${encodeURIComponent(purchasePagePath)}`;
 
-  async function handleFinalizeBook() {
+  const bookDisplayPriceWon = useMemo(() => {
+    for (const p of localPhotos) {
+      const v = p.price;
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+        return v;
+      }
+    }
+    return null;
+  }, [localPhotos]);
+
+  async function submitFinishEditing() {
     const uid = bookUid.trim();
     if (!uid) return;
     setFinalizePending(true);
+    setFinalizedBannerMessage(null);
     setFinalizeBannerIsError(false);
     try {
-      const res = await postBookFinalization(uid);
+      const res = await postBookFinalization(uid, 0);
       const text = await res.text();
       let j: FinalizeBookResponse = {};
       try {
@@ -533,9 +634,23 @@ export default function BookGalleryPage() {
       setFinalizedBannerMessage(
         typeof j.message === "string" && j.message.trim() !== ""
           ? j.message
-          : "책 최종화 완료"
+          : "편집을 마쳤습니다."
       );
       setBookFinalized(true);
+      const entriesRes = await fetchMyBookEntries();
+      if (entriesRes.ok) {
+        try {
+          const entries = (await entriesRes.json()) as MyBookEntry[];
+          const entry = Array.isArray(entries)
+            ? entries.find((e) => e.bookUid === uid)
+            : undefined;
+          if (entry?.finalized === true) {
+            setBookFinalized(true);
+          }
+        } catch {
+          /* keep setBookFinalized(true) from above */
+        }
+      }
     } catch {
       setFinalizeBannerIsError(true);
       setFinalizedBannerMessage("네트워크 오류로 최종화할 수 없습니다.");
@@ -550,58 +665,19 @@ export default function BookGalleryPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <Link href="/" className="text-sm hover:underline">
-          ← 홈
-        </Link>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {loggedIn ? (
-            <>
-              <Link
-                href="/create-book"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                책 생성
-              </Link>
-              <Link
-                href="/my"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                내 정보
-              </Link>
-              <Link
-                href="/my-books"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                책 관리
-              </Link>
-              <Link
-                href="/upload"
-                className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                업로드
-              </Link>
-              <button type="button" onClick={handleLogout} className="text-sm hover:underline">
-                로그아웃
-              </button>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="text-sm hover:underline">
-                로그인
-              </Link>
-              <Link href="/signup" className="text-sm hover:underline">
-                회원가입
-              </Link>
-            </>
-          )}
-        </div>
-      </header>
-
       <main className="mx-auto max-w-[min(100%,1600px)] px-4 py-8">
         <h1 className="mb-1 font-mono text-sm text-zinc-500">{bookUid || "—"}</h1>
-        <p className="mb-6 text-lg font-semibold">책 사진 목록</p>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-lg font-semibold">책 사진 목록</p>
+          {ownerMayEditPhotos && bookUid.trim() !== "" ? (
+            <Link
+              href={`/upload?bookUid=${encodeURIComponent(bookUid.trim())}`}
+              className="inline-flex w-fit shrink-0 items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              사진 업로드
+            </Link>
+          ) : null}
+        </div>
 
         {loading ? <p className="text-sm text-zinc-500">불러오는 중…</p> : null}
         {error ? (
@@ -647,6 +723,30 @@ export default function BookGalleryPage() {
               aria-label="업로드된 모든 사진"
               className="min-w-0 border-t border-zinc-200 pt-6 dark:border-zinc-800 lg:border-l lg:border-t-0 lg:pl-6 lg:pr-6 lg:pt-0"
             >
+              {showPurchaseCta ? (
+                <div className="mb-4 space-y-2">
+                  <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
+                    {bookDisplayPriceWon !== null ? (
+                      <>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-500">판매가</span>
+                        <br />
+                        <span className="text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
+                          {bookDisplayPriceWon.toLocaleString("ko-KR")}
+                        </span>
+                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">원</span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-500">가격 정보 없음</span>
+                    )}
+                  </p>
+                  <Link
+                    href={purchaseButtonHref}
+                    className="inline-flex w-full items-center justify-center rounded-md border border-violet-700 bg-violet-700 px-3 py-2 text-sm font-medium text-white hover:bg-violet-800 dark:border-violet-600 dark:bg-violet-800 dark:hover:bg-violet-700"
+                  >
+                    구매
+                  </Link>
+                </div>
+              ) : null}
               <div className="mb-3 space-y-2">
                 <h2 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
                   업로드 사진 (클릭 시 이 기기에 저장)
@@ -657,7 +757,7 @@ export default function BookGalleryPage() {
                       <button
                         type="button"
                         disabled={finalizePending}
-                        onClick={() => void handleFinalizeBook()}
+                        onClick={() => void submitFinishEditing()}
                         className="rounded-md border border-emerald-700 bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-800 disabled:opacity-50 dark:border-emerald-600 dark:bg-emerald-800 dark:hover:bg-emerald-700"
                       >
                         {finalizePending ? "처리 중…" : "편집 마치기"}
@@ -729,6 +829,14 @@ export default function BookGalleryPage() {
                         </button>
                       ) : null}
                     </>
+                  ) : null}
+                  {isOwnerOfThisBook && bookFinalized && bookUid.trim() !== "" ? (
+                    <Link
+                      href={`/book/${encodeURIComponent(bookUid.trim())}/estimate`}
+                      className="inline-flex items-center rounded-md border border-violet-700 bg-violet-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-800 dark:border-violet-600 dark:bg-violet-800 dark:hover:bg-violet-700"
+                    >
+                      견적 조회
+                    </Link>
                   ) : null}
                 </div>
                 {ownerMayEditPhotos && photoSelectMessage ? (

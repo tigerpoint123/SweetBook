@@ -13,7 +13,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/** 북 UID당 최신 1건 — 표지로 선택한 로컬 {@link Photo} 참조 */
 @Entity
 @Table(
         name = "book_cover",

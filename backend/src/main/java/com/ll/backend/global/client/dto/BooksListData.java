@@ -8,4 +8,5 @@ public record BooksListData(
         List<BookListItem> books,
         Integer total,
         Integer limit,
-        Integer offset) {}
+        Integer offset
+) {}

@@ -1,20 +1,19 @@
 package com.ll.backend.domain.member.controller;
 
-import com.ll.backend.domain.member.entity.Member;
 import com.ll.backend.domain.member.service.MemberService;
 import com.ll.backend.domain.member.vo.LoginResponse;
 import com.ll.backend.domain.member.vo.MemberInfo;
 import com.ll.backend.domain.member.vo.MemberLoginResult;
 import jakarta.validation.constraints.NotBlank;
-import java.time.Duration;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/member")

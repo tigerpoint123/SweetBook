@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 public class MemberServiceImpl implements MemberService {
 
     private final MemberRepository memberRepository;
+    private final PasswordEncoder passwordEncoder;
     private final ConcurrentHashMap<String, String> sessionIdToUsername = new ConcurrentHashMap<>();
 
     @Override
@@ -25,10 +27,30 @@ public class MemberServiceImpl implements MemberService {
         return new MemberLoginResult(true, "로그인 성공", sessionId);
     }
 
-    private boolean credentialsMatch(String username, String password) {
-        return memberRepository.findByUsername(username)
-                .map(m -> password.equals(m.getPassword()))
+    private boolean credentialsMatch(String username, String rawPassword) {
+        return memberRepository
+                .findByUsername(username)
+                .map(m -> storedPasswordMatches(rawPassword, m.getPassword()))
                 .orElse(false);
+    }
+
+    private boolean storedPasswordMatches(String rawPassword, String stored) {
+        if (rawPassword == null || stored == null) {
+            return false;
+        }
+        if (looksLikeBcryptHash(stored)) {
+            return passwordEncoder.matches(rawPassword, stored);
+        }
+        // DB에 남아 있는 구 평문 비밀번호(기존 개발 데이터) 호환
+        return rawPassword.equals(stored);
+    }
+
+    private static boolean looksLikeBcryptHash(String stored) {
+        return stored.length() >= 7
+                && stored.charAt(0) == '$'
+                && (stored.startsWith("$2a$")
+                        || stored.startsWith("$2b$")
+                        || stored.startsWith("$2y$"));
     }
 
     private String issueSessionId(String username) {
@@ -59,7 +81,8 @@ public class MemberServiceImpl implements MemberService {
 
     @Override
     public void postMember(String username, String password) {
-        Member member = new Member(username, password);
+        String encoded = passwordEncoder.encode(password);
+        Member member = new Member(username, encoded);
         memberRepository.save(member);
     }
 }

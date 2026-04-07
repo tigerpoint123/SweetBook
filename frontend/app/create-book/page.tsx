@@ -1,17 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { readLoggedIn } from "@/lib/auth-storage";
 import { createBook } from "@/lib/sweetbook-api";
 
+const DEFAULT_BOOK_SPEC_UID = "SQUAREBOOK_HC";
+const DEFAULT_EXTERNAL_REF = "partner-book-001";
+
 export default function CreateBookPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [bookSpecUid, setBookSpecUid] = useState("SQUAREBOOK_HC");
   const [bookAuthor, setBookAuthor] = useState("");
-  const [externalRef, setExternalRef] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -28,25 +28,17 @@ export default function CreateBookPage() {
       setMessage("책 제목을 입력하세요.");
       return;
     }
-    if (!bookSpecUid.trim()) {
-      setMessage("책 규격 UID를 입력하세요.");
-      return;
-    }
     if (!bookAuthor.trim()) {
       setMessage("저자를 입력하세요.");
-      return;
-    }
-    if (!externalRef.trim()) {
-      setMessage("외부 참조 ID를 입력하세요.");
       return;
     }
     setPending(true);
     try {
       const res = await createBook({
         title: title.trim(),
-        bookSpecUid: bookSpecUid.trim(),
+        bookSpecUid: DEFAULT_BOOK_SPEC_UID,
         bookAuthor: bookAuthor.trim(),
-        externalRef: externalRef.trim(),
+        externalRef: DEFAULT_EXTERNAL_REF,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -68,26 +60,6 @@ export default function CreateBookPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <Link href="/" className="text-sm hover:underline">
-          ← 홈
-        </Link>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/my-books"
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-          >
-            책 관리
-          </Link>
-          <Link
-            href="/upload"
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            업로드
-          </Link>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-md px-4 py-10">
         <h1 className="mb-6 text-xl font-semibold">책 생성</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -101,17 +73,10 @@ export default function CreateBookPage() {
               className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            책 규격 UID (bookSpecUid)
-            <input
-              name="bookSpecUid"
-              value={bookSpecUid}
-              onChange={(e) => setBookSpecUid(e.target.value)}
-              required
-              placeholder="예: SQUAREBOOK_HC"
-              className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
-            />
-          </label>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            책 규격은 <span className="font-mono">{DEFAULT_BOOK_SPEC_UID}</span>로 고정됩니다. 외부 참조 ID는{" "}
+            <span className="font-mono">{DEFAULT_EXTERNAL_REF}</span>로 전송됩니다.
+          </p>
           <label className="flex flex-col gap-1 text-sm">
             저자 (bookAuthor)
             <input
@@ -119,17 +84,6 @@ export default function CreateBookPage() {
               value={bookAuthor}
               onChange={(e) => setBookAuthor(e.target.value)}
               required
-              className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            외부 참조 ID (externalRef)
-            <input
-              name="externalRef"
-              value={externalRef}
-              onChange={(e) => setExternalRef(e.target.value)}
-              required
-              placeholder="예: partner-book-001"
               className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
             />
           </label>

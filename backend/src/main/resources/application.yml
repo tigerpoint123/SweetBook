@@ -1,6 +1,4 @@
 spring:
-#  config:
-#    import: "optional:configtree:.env/"
   application:
     name: backend
   servlet:
@@ -26,14 +24,20 @@ spring:
 
 sweetbook:
   api:
-    base-url: ${SWEETBOOK_API_BASE_URL:https://api-sandbox.sweetbook.com/v1}
+    base-url: ${SWEETBOOK_API_BASE_URL}
     key: ${SWEETBOOK_API_KEY}
-  # POST .../contents 는 multipart/form-data. 템플릿 1vuzMfUnCkXS: parameters JSON 에 monthYearLabel·photos(배열).
   contents:
-    template-uid: ${SWEETBOOK_CONTENTS_TEMPLATE_UID:1vuzMfUnCkXS}
-    break-before: ${SWEETBOOK_CONTENTS_BREAK_BEFORE:page}
+    template-uid: ${SWEETBOOK_CONTENTS_TEMPLATE_UID}
+    break-before: ${SWEETBOOK_CONTENTS_BREAK_BEFORE}
 
 # 업로드 이미지 로컬 저장 (프로젝트 기준 상대 경로)
 app:
   photo:
     upload-dir: uploads/photos
+
+credit:
+  account-uid: acc_abc123xyz
+  currency: KRW
+  env: test
+  created-at: "2026-01-01T00:00:00Z"
+  updated-at: "2026-03-01T10:00:00Z"

@@ -35,6 +35,9 @@ public class SweetbookBook {
     @Column(name = "finalized_at")
     private Instant finalizedAt;
 
+    /** 최종화 시 설정되는 판매·표시 단가(원). */
+    private Long price;
+
     @Builder
     public SweetbookBook(Long memberId, String bookUid, Instant createdAt, Instant finalizedAt) {
         this.memberId = memberId;
@@ -45,5 +48,9 @@ public class SweetbookBook {
 
     public void markFinalized(Instant at) {
         this.finalizedAt = at != null ? at : Instant.now();
+    }
+
+    public void setPrice(Long price) {
+        this.price = price;
     }
 }

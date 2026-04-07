@@ -61,7 +61,7 @@ public class PhotoController {
         return photoService.listSamplePhotosForBook(bookUid);
     }
 
-    /** 갤러리 분할 조회 2: 비샘플만, 제한 조회자는 {@code /blur} */
+    /** 갤러리 분할 조회 2: 비샘플만, {@code fileUrl} 항상 원본 {@code /file} */
     @GetMapping("/books/{bookUid}/non-sample-photos")
     public List<LocalPhotoItemResponse> listNonSamplePhotosForBook(
             @PathVariable String bookUid,
@@ -79,7 +79,6 @@ public class PhotoController {
                 .body(photoService.listSelectedForBook(bookUid, memberIdFromSession(sessionId)));
     }
 
-    /** 기존 채택을 지우지 않고, 요청한 photoIds만 순서대로 추가 */
     @PostMapping(
             value = "/books/{bookUid}/selected",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -115,27 +114,6 @@ public class PhotoController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_TYPE, served.contentType())
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                .body(served.resource());
-    }
-
-    @GetMapping("/{id}/original")
-    public ResponseEntity<Resource> original(
-            @PathVariable Long id,
-            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
-        PhotoService.ServedPhoto served =
-                photoService.servePhotoOriginal(id, memberIdFromSession(sessionId));
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, served.contentType())
-                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                .body(served.resource());
-    }
-
-    @GetMapping("/{id}/blur")
-    public ResponseEntity<Resource> blur(@PathVariable Long id) {
-        PhotoService.ServedPhoto served = photoService.servePhotoBlur(id);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, served.contentType())
-                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")
                 .body(served.resource());
     }
 }

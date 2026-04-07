@@ -223,11 +223,14 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     @Override
     @Transactional
-    public Map<String, Object> finalizeBook(String bookUid, Long memberId) {
+    public Map<String, Object> finalizeBook(String bookUid, Long memberId, long price) {
         Objects.requireNonNull(bookUid, "bookUid");
         Objects.requireNonNull(memberId, "memberId");
         if (memberId <= 0) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
+        }
+        if (price < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "금액은 0 이상이어야 합니다.");
         }
         if (!sweetbookBookRepository.existsByBookUidAndMemberId(bookUid, memberId)) {
             throw new ResponseStatusException(
@@ -241,6 +244,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                     .ifPresent(
                             book -> {
                                 book.markFinalized(at);
+                                book.setPrice(price);
                                 sweetbookBookRepository.save(book);
                             });
         }
@@ -278,7 +282,6 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
     private void persistPhotoAfterUpload(String bookUid, PhotoUploadOutcome outcome) {
         SweetbookApiEnvelope<PhotoUploadData> env = outcome.envelope();
         if (outcome.originalLocalPath() == null
-                || outcome.blurLocalPath() == null
                 || env == null
                 || !env.success()
                 || env.data() == null) {
@@ -289,7 +292,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                 photoRepository.save(
                         Photo.builder()
                                 .localPath(outcome.originalLocalPath())
-                                .blurLocalPath(outcome.blurLocalPath())
+                                .blurLocalPath(null)
                                 .originalName(d.originalName())
                                 .sweetbookFileName(d.fileName())
                                 .bookUid(bookUid)

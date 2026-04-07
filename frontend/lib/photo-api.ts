@@ -12,8 +12,9 @@ export type LocalPhotoItem = {
   isDuplicate: boolean;
   fileUrl: string;
   isSample?: boolean;
+  /** 책 최종화 시 설정된 단가(원). 사진별로 동일 값이 반복될 수 있음. */
+  price?: number | null;
   originalUrl?: string;
-  blurUrl?: string;
 };
 
 export function localPhotoAbsoluteUrl(fileUrl: string): string {

@@ -12,4 +12,5 @@ public record BookListItem(
         String pdfStatus,
         Instant pdfRequestedAt,
         Instant createdAt,
-        String externalRef) {}
+        String externalRef
+) {}

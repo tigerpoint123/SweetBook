@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BookCoverTile } from "@/components/BookCoverTile";
-import { clearLoggedIn, readLoggedIn } from "@/lib/auth-storage";
+import { readLoggedIn } from "@/lib/auth-storage";
 import {
   buildBookCoverRows,
   fetchBooksList,
@@ -20,17 +20,12 @@ import {
 
 export default function MyBooksPage() {
   const router = useRouter();
-  const [loggedIn, setLoggedIn] = useState(false);
   const [myEntries, setMyEntries] = useState<MyBookEntry[] | null>(null);
   const [listEnvelope, setListEnvelope] = useState<BooksListEnvelope | null>(null);
   const [localPhotos, setLocalPhotos] = useState<LocalPhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [listWarning, setListWarning] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoggedIn(readLoggedIn());
-  }, []);
 
   useEffect(() => {
     if (!readLoggedIn()) {
@@ -124,55 +119,8 @@ export default function MyBooksPage() {
     [myEntries, mergedBooks, localPhotos]
   );
 
-  function handleLogout() {
-    clearLoggedIn();
-    setLoggedIn(false);
-    router.refresh();
-  }
-
   return (
     <div className="min-h-screen">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <Link href="/" className="text-sm hover:underline">
-          ← 홈
-        </Link>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {loggedIn ? (
-            <>
-              <Link
-                href="/create-book"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                책 생성
-              </Link>
-              <Link
-                href="/my"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                내 정보
-              </Link>
-              <span className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-                책 관리
-              </span>
-              <Link
-                href="/upload"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-900"
-              >
-                업로드
-              </Link>
-              <button type="button" onClick={handleLogout} className="text-sm hover:underline">
-                로그아웃
-              </button>
-            </>
-          ) : (
-            <Link href="/login" className="text-sm hover:underline">
-              로그인
-            </Link>
-          )}
-        </div>
-      </header>
-
       <main className="mx-auto max-w-4xl px-4 py-10">
         <h1 className="mb-1 text-2xl font-semibold">책 관리</h1>
         <p className="mb-6 text-sm text-zinc-600 dark:text-zinc-400">

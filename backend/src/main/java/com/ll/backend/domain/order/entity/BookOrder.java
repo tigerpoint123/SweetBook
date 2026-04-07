@@ -11,9 +11,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 책(Sweetbook 북) 구매 기록. Order API는 추후 반영.
- */
 @Entity
 @Table(name = "book_order")
 @Getter
@@ -27,7 +24,6 @@ public class BookOrder {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
 
-    /** Sweetbook 북 UID */
     @Column(name = "book_uid", nullable = false, length = 128)
     private String bookUid;
 

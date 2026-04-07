@@ -47,6 +47,6 @@ public interface SweetbookApiService {
     /** Sweetbook DELETE /v1/books/{bookUid}/photos/{fileName} — 북 소유자만, 로컬 DB에 동일 fileName 행이 있을 때 */
     Map<String, Object> deleteBookPhoto(String bookUid, String fileName, Long memberId);
 
-    /** Sweetbook POST /v1/books/{bookUid}/finalization — 북 소유자만 */
-    Map<String, Object> finalizeBook(String bookUid, Long memberId);
+    /** Sweetbook POST /v1/books/{bookUid}/finalization — 북 소유자만. 성공 시 로컬 {@code sweetbook_book}에 {@code price} 반영. */
+    Map<String, Object> finalizeBook(String bookUid, Long memberId, long price);
 }

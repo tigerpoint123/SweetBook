@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { memberApi, postMemberForm } from "@/lib/member-api";
@@ -34,19 +33,6 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-        >
-          ← 홈
-        </button>
-        <Link href="/login" className="text-sm hover:underline">
-          로그인
-        </Link>
-      </header>
-
       <main className="mx-auto flex max-w-sm flex-col gap-6 px-4 py-12">
         <h1 className="text-xl font-semibold">회원가입</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

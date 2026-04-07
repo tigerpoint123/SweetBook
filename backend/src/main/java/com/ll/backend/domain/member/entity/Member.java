@@ -20,7 +20,8 @@ public class Member {
     @Column(unique = true, nullable = false)
     private String username;
 
-    @Column(nullable = false)
+    /** BCrypt 해시(약 60자). 기존 평문 행은 로그인 시 마이그레이션 전까지 평문 비교로 호환. */
+    @Column(nullable = false, length = 255)
     private String password;
 
     protected Member() {

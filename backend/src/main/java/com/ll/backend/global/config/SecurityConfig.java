@@ -8,6 +8,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -18,6 +20,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     private static final List<String> ALLOWED_ORIGINS = List.of("http://localhost:3000");
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -45,6 +52,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/h2-console", "/h2-console/**").permitAll()
                         .requestMatchers("/api/**").permitAll()
+                        .requestMatchers("/v1/**").permitAll()
                         .anyRequest().authenticated())
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
         return http.build();

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { setLoggedIn } from "@/lib/auth-storage";
 import { memberApi, postMemberForm } from "@/lib/member-api";
 
@@ -12,6 +11,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [postLoginPath, setPostLoginPath] = useState("/");
+
+  useEffect(() => {
+    const rawNext = new URLSearchParams(window.location.search).get("next");
+    setPostLoginPath(
+      rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+        ? rawNext
+        : "/"
+    );
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,7 +42,7 @@ export default function LoginPage() {
       }
       setLoggedIn();
       window.alert(successMsg);
-      router.push("/");
+      router.push(postLoginPath);
     } catch {
       setMessage("서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인하세요.");
     } finally {
@@ -43,19 +52,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-        >
-          ← 홈
-        </button>
-        <Link href="/signup" className="text-sm hover:underline">
-          회원가입
-        </Link>
-      </header>
-
       <main className="mx-auto flex max-w-sm flex-col gap-6 px-4 py-12">
         <h1 className="text-xl font-semibold">로그인</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

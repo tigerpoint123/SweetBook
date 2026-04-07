@@ -18,7 +18,7 @@ public interface PhotoService {
     /** {@code is_sample=true} 만, id 오름차순. 갤러리용 {@code fileUrl}은 항상 {@code /file}. */
     List<LocalPhotoItemResponse> listSamplePhotosForBook(String bookUid);
 
-    /** {@code is_sample=false} 만, id 내림차순. {@code fileUrl}은 조회자에 따라 {@code /file} 또는 {@code /blur}. */
+    /** {@code is_sample=false} 만, id 내림차순. {@code fileUrl}은 항상 원본 {@code /file}. */
     List<LocalPhotoItemResponse> listNonSamplePhotosForBook(String bookUid, Optional<Long> viewerMemberId);
 
     /** 해당 북에서 id 오름차순 상위 3장만 {@code is_sample=true}, 나머지 false로 맞춥니다. */
@@ -27,16 +27,8 @@ public interface PhotoService {
     /** 이번에 채택한 photoIds를 순서대로 추가(기존 selected_photo 행은 유지) */
     void appendBookSelection(String bookUid, List<Long> photoIds);
 
-    /**
-     * {@code /file}. 소유자·구매자·샘플은 원본, 그 외 비샘플은 블러(최종화 여부와 동일 규칙).
-     */
+    /** {@code /file} — 항상 원본 바이너리. */
     ServedPhoto servePhoto(long id, Optional<Long> memberId);
-
-    /** 원본 파일. 최종화 후에는 샘플·소유자·구매자만 */
-    ServedPhoto servePhotoOriginal(long id, Optional<Long> memberId);
-
-    /** 블러 처리본만 (항상 허용) */
-    ServedPhoto servePhotoBlur(long id);
 
     List<BookCoverItemResponse> listBookCovers();
 
