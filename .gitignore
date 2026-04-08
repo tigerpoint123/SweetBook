@@ -27,7 +27,10 @@ coverage/
 !.env.example
 
 # Local uploaded photos
-uploads/
+
+# Windows reserved device name accidentally created
+nul
+
 
 # Backend H2 test DB (jdbc:h2:file:./data/testdb)
 backend/data/
