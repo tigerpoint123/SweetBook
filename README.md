@@ -13,6 +13,7 @@
 ### 백엔드 (Spring Boot)
 
 #### 환경 변수 설정
+작업 디렉토리가 /c/workplace/SweetBook_hnk 인 위치에서 
 
 ```bash
 cd backend
