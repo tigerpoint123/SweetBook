@@ -1,5 +1,6 @@
 package com.ll.backend.domain.sweetbook.support;
 
+import com.ll.backend.global.client.dto.book.CreateBookResponseData;
 import java.util.Map;
 import java.util.Optional;
 
@@ -7,6 +8,20 @@ import java.util.Optional;
 public final class SweetbookCreateResponseParser {
 
     private SweetbookCreateResponseParser() {}
+
+    public static Optional<String> extractBookUid(CreateBookResponseData data) {
+        if (data == null) {
+            return Optional.empty();
+        }
+        Optional<String> top = stringNonBlank(data.bookUid());
+        if (top.isPresent()) {
+            return top;
+        }
+        if (data.book() != null) {
+            return stringNonBlank(data.book().bookUid());
+        }
+        return Optional.empty();
+    }
 
     public static Optional<String> extractBookUid(Map<String, Object> body) {
         if (body == null || body.isEmpty()) {

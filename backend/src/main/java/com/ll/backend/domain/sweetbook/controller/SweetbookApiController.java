@@ -5,17 +5,22 @@ import com.ll.backend.domain.sweetbook.dto.FinalizeBookRequest;
 import com.ll.backend.domain.sweetbook.service.SweetbookApiService;
 import com.ll.backend.domain.sweetbook.support.SweetbookCoverDefaults;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
-import com.ll.backend.global.client.dto.AddBookContentsRequest;
-import com.ll.backend.global.client.dto.BookGalleryData;
-import com.ll.backend.global.client.dto.BookPhotosData;
-import com.ll.backend.global.client.dto.BooksListData;
-import com.ll.backend.global.client.dto.CreateBookRequest;
-import com.ll.backend.global.client.dto.PhotoUploadData;
-import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.AddBookContentsRequest;
+import com.ll.backend.global.client.dto.book.AddBookContentsResponse;
+import com.ll.backend.global.client.dto.book.BookGalleryData;
+import com.ll.backend.global.client.dto.book.BookPhotosData;
+import com.ll.backend.global.client.dto.book.BooksListData;
+import com.ll.backend.global.client.dto.book.CreateBookRequest;
+import com.ll.backend.global.client.dto.book.CreateBookResponseData;
+import com.ll.backend.global.client.dto.photo.PhotoUploadData;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
+import com.ll.backend.global.client.dto.book.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.SweetbookApiResponse;
 import jakarta.validation.Valid;
+
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -34,19 +39,16 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/api/sweetbook")
 @RequiredArgsConstructor
 @Slf4j
 public class SweetbookApiController {
-
     private static final String SESSION_COOKIE_NAME = "SESSION";
 
     private final SweetbookApiService sweetbookApiService;
     private final MemberService memberService;
-    private final ObjectMapper objectMapper;
 
     @GetMapping(value = "/books", produces = MediaType.APPLICATION_JSON_VALUE)
     public SweetbookApiEnvelope<BooksListData> listBooks(
@@ -54,19 +56,19 @@ public class SweetbookApiController {
             @RequestParam(required = false) Integer offset,
             @RequestParam(required = false) String pdfStatusIn,
             @RequestParam(required = false) String createdFrom,
-            @RequestParam(required = false) String createdTo,
-            @RequestParam(required = false, defaultValue = "false") boolean finalizedOnly) {
-        return sweetbookApiService.listBooks(
-                limit, offset, pdfStatusIn, createdFrom, createdTo, finalizedOnly);
+            @RequestParam(required = false) String createdTo
+    ) {
+        return sweetbookApiService.listBooks(limit, offset, pdfStatusIn, createdFrom, createdTo);
     }
 
     @GetMapping(value = "/my-books", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<List<MyBookItemResponse>> listMyBooks(
-            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
+            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId
+    ) {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -74,12 +76,12 @@ public class SweetbookApiController {
     }
 
     @PostMapping(value = "/books", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Map<String, Object> createBook(
+    public SweetbookApiResponse<CreateBookResponseData> createBook(
             @Valid @RequestBody CreateBookRequest body,
             @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
         Optional<Long> memberId =
                 (sessionId != null && !sessionId.isBlank())
-                        ? memberService.resolveMemberIdBySessionId(sessionId)
+                        ? memberService.getMemberIdBySessionId(sessionId)
                         : Optional.empty();
         return sweetbookApiService.createBook(body, memberId);
     }
@@ -91,16 +93,16 @@ public class SweetbookApiController {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result = sweetbookApiService.deleteBook(bookUid, memberIdOpt.get());
+            SweetbookResponse result = sweetbookApiService.deleteBook(bookUid, memberIdOpt.get());
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
-            if (responseBody == null || responseBody.isBlank()) {
+            if (responseBody.isBlank()) {
                 return ResponseEntity.status(e.getStatusCode()).build();
             }
             return ResponseEntity.status(e.getStatusCode())
@@ -131,24 +133,12 @@ public class SweetbookApiController {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result =
-                    sweetbookApiService.addBookContents(bookUid, body, memberIdOpt.get());
-            try {
-                log.info(
-                        "addBookContents 백엔드→클라이언트 응답 bookUid={}, body={}",
-                        bookUid,
-                        objectMapper.writeValueAsString(result));
-            } catch (Exception logEx) {
-                log.info(
-                        "addBookContents 백엔드→클라이언트 응답 bookUid={}, body={}",
-                        bookUid,
-                        result);
-            }
+            AddBookContentsResponse result = sweetbookApiService.addBookContents(bookUid, body, memberIdOpt.get());
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
@@ -156,8 +146,8 @@ public class SweetbookApiController {
                     "addBookContents Sweetbook 오류 bookUid={}, status={}, 서버응답body={}",
                     bookUid,
                     e.getStatusCode().value(),
-                    responseBody != null ? responseBody : "");
-            if (responseBody == null || responseBody.isBlank()) {
+                    responseBody);
+            if (responseBody.isBlank()) {
                 return ResponseEntity.status(e.getStatusCode()).build();
             }
             return ResponseEntity.status(e.getStatusCode())
@@ -178,24 +168,13 @@ public class SweetbookApiController {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result =
+            SweetbookResponse result =
                     sweetbookApiService.finalizeBook(bookUid, memberIdOpt.get(), body.price());
-            try {
-                log.info(
-                        "finalizeBook 백엔드→클라이언트 응답 bookUid={}, body={}",
-                        bookUid,
-                        objectMapper.writeValueAsString(result));
-            } catch (Exception logEx) {
-                log.info(
-                        "finalizeBook 백엔드→클라이언트 응답 bookUid={}, body={}",
-                        bookUid,
-                        result);
-            }
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
@@ -239,12 +218,12 @@ public class SweetbookApiController {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId); // 여기부터
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result =
+            SweetbookResponse result =
                     sweetbookApiService.deleteBookPhoto(bookUid, fileName, memberIdOpt.get());
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
@@ -263,7 +242,7 @@ public class SweetbookApiController {
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public Map<String, Object> uploadBookCover(
+    public SweetbookResponse uploadBookCover(
             @PathVariable String bookUid, MultipartHttpServletRequest request) {
         String templateUid = Optional.ofNullable(request.getParameter("templateUid"))
                 .map(String::trim)

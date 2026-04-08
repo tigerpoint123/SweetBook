@@ -1,10 +1,12 @@
-package com.ll.backend.global.client.dto;
+package com.ll.backend.global.client.dto.order;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record SweetbookApiResponse<T>(
+public record GetOrderDetailResponse(
         boolean success,
         String message,
-        T data
-) {}
+        Map<String, Object> data
+) {
+}

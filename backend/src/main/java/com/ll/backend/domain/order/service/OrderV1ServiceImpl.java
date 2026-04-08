@@ -1,12 +1,6 @@
 package com.ll.backend.domain.order.service;
 
-import com.ll.backend.domain.order.dto.CreateOrderRequest;
-import com.ll.backend.domain.order.dto.OrderEstimateRequest;
-import com.ll.backend.domain.order.dto.OrderLineRequest;
-import com.ll.backend.domain.order.dto.OrderShippingRequest;
-import com.ll.backend.domain.order.dto.OrderSummaryItemDto;
-import com.ll.backend.domain.order.dto.OrdersListApiResponse;
-import com.ll.backend.domain.order.dto.OrdersListDataDto;
+import com.ll.backend.domain.order.dto.*;
 import com.ll.backend.domain.order.entity.BookOrder;
 import com.ll.backend.domain.order.entity.ShopOrder;
 import com.ll.backend.domain.order.entity.ShopOrderLine;
@@ -15,13 +9,8 @@ import com.ll.backend.domain.order.repository.ShopOrderRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
 import com.ll.backend.global.client.SweetbookApiClient;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
+import com.ll.backend.global.client.dto.order.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -29,12 +18,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class OrderV1ServiceImpl implements OrderV1Service {
-
-    private static final String SUCCESS = "Success";
 
     private final ShopOrderRepository shopOrderRepository;
     private final OrderRepository orderRepository;
@@ -42,12 +34,9 @@ public class OrderV1ServiceImpl implements OrderV1Service {
     private final SweetbookApiClient sweetbookApiClient;
 
     @Override
-    @Transactional(readOnly = true)
-    public Map<String, Object> estimateOrder(Long memberId, OrderEstimateRequest request) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
+    public SweetbookResponse estimateOrder(Long memberId, OrderEstimateRequest request) {
         List<Map<String, Object>> payloadItems = new ArrayList<>();
+
         for (OrderLineRequest line : request.items()) {
             String uid = line.bookUid() != null ? line.bookUid().trim() : "";
             if (uid.isEmpty()) {
@@ -57,90 +46,40 @@ public class OrderV1ServiceImpl implements OrderV1Service {
                 throw new ResponseStatusException(
                         HttpStatus.FORBIDDEN, "해당 북에 대한 견적 조회 권한이 없습니다.");
             }
-            payloadItems.add(Map.of("bookUid", uid, "quantity", line.quantity()));
+            payloadItems.add(
+                    Map.of(
+                            "bookUid",
+                            uid,
+                            "quantity",
+                            line.quantity()));
         }
         return sweetbookApiClient.estimateOrder(Map.of("items", payloadItems));
     }
 
     @Override
-    @Transactional
-    public Map<String, Object> createOrder(Long memberId, CreateOrderRequest request) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
-        OrderShippingRequest s = request.shipping();
-        String ext =
-                request.externalRef() != null && !request.externalRef().isBlank()
-                        ? request.externalRef().trim()
-                        : null;
-        String a2 = s.address2() != null ? s.address2().trim() : "";
-        String memo = s.memo() != null ? s.memo().trim() : "";
+    public CreateOrderResponse createOrder(Long memberId, CreateOrderRequest request) {
+        List<CreateOrderItemPayload> payloadItems = new ArrayList<>();
 
-        List<Map<String, Object>> payloadItems = new ArrayList<>();
-        Set<String> bookUids = new LinkedHashSet<>();
+        OrderShippingRequest orderShippingRequest = request.shipping();
+
         for (OrderLineRequest line : request.items()) {
             String uid = line.bookUid() != null ? line.bookUid().trim() : "";
             if (uid.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "bookUid가 비었습니다.");
             }
-            payloadItems.add(Map.of("bookUid", uid, "quantity", line.quantity()));
-            bookUids.add(uid);
+            payloadItems.add(new CreateOrderItemPayload(uid, line.quantity()));
         }
 
-        Map<String, Object> shipping =
-                Map.of(
-                        "recipientName", s.recipientName().trim(),
-                        "recipientPhone", s.recipientPhone().trim(),
-                        "postalCode", s.postalCode().trim(),
-                        "address1", s.address1().trim(),
-                        "address2", a2.isEmpty() ? "" : a2,
-                        "memo", memo.isEmpty() ? "" : memo);
+        CreateOrderShippingPayload shipping = CreateOrderShippingPayload.of(orderShippingRequest);
+        CreateOrderPayload requestBody = new CreateOrderPayload(payloadItems, shipping, request.externalRef());
+        CreateOrderResponse sweetbookResponse = sweetbookApiClient.createOrder(requestBody);
 
-        Map<String, Object> requestBody =
-                ext != null && !ext.isBlank()
-                        ? Map.of("items", payloadItems, "shipping", shipping, "externalRef", ext)
-                        : Map.of("items", payloadItems, "shipping", shipping);
-
-        Map<String, Object> sweetbookResponse = sweetbookApiClient.createOrder(requestBody);
-        boolean success =
-                sweetbookResponse.get("success") instanceof Boolean b && b;
-        if (!success) {
-            return sweetbookResponse;
-        }
-
-        BigDecimal totalAmount = computeTotalAmount(request.items());
-        String orderUid = newOrderUid();
-        int orderStatus = OrderV1ServiceSupport.STATUS_PAID;
-        Object dataObj = sweetbookResponse.get("data");
-        if (dataObj instanceof Map<?, ?> dm) {
-            Object uid = dm.get("orderUid");
-            if (uid instanceof String sUid && !sUid.isBlank()) {
-                orderUid = sUid;
-            }
-            Object status = dm.get("orderStatus");
-            if (status instanceof Number n) {
-                orderStatus = n.intValue();
-            }
-            Object amount = dm.get("totalAmount");
-            if (amount instanceof Number n) {
-                totalAmount = BigDecimal.valueOf(n.doubleValue());
-            }
-        }
-
-        ShopOrder order =
-                ShopOrder.builder()
-                        .memberId(memberId)
-                        .externalRef(ext)
-                        .recipientName(s.recipientName().trim())
-                        .recipientPhone(s.recipientPhone().trim())
-                        .postalCode(s.postalCode().trim())
-                        .address1(s.address1().trim())
-                        .address2(a2.isEmpty() ? null : a2)
-                        .shippingMemo(memo.isEmpty() ? null : memo)
-                        .orderUid(orderUid)
-                        .orderStatus(orderStatus)
-                        .totalAmount(totalAmount)
-                        .build();
+        ShopOrder order = ShopOrder.create(
+                memberId,
+                request,
+                sweetbookResponse.data(),
+                OrderV1ServiceSupport.STATUS_PAID,
+                computeTotalAmount(request.items()));
         for (OrderLineRequest line : request.items()) {
             order.addLine(new ShopOrderLine(order, line.bookUid().trim(), line.quantity()));
         }
@@ -152,35 +91,33 @@ public class OrderV1ServiceImpl implements OrderV1Service {
                 saved.getId(),
                 saved.getOrderUid(),
                 saved.getTotalAmount(),
-                request.items() != null ? request.items().size() : 0);
+                request.items().size());
 
-        for (String uid : bookUids) {
-            if (!orderRepository.existsByMemberIdAndBookUid(memberId, uid)) {
-                orderRepository.save(BookOrder.builder().memberId(memberId).bookUid(uid).build());
-            }
-        }
+        orderRepository.saveAll(
+                request.items().stream()
+                        .map(line -> BookOrder.builder()
+                                .memberId(memberId)
+                                .bookUid(line.bookUid())
+                                .quantity(line.quantity())
+                                .build())
+                        .toList());
 
         return sweetbookResponse;
     }
 
     @Override
-    @Transactional(readOnly = true)
     public OrdersListApiResponse listOrders(Long memberId, int limit, int offset) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
-        Map<String, Object> response = sweetbookApiClient.getOrders(limit, offset);
-        boolean success = response.get("success") instanceof Boolean b && b;
-        String message =
-                response.get("message") instanceof String m && !m.isBlank() ? m : SUCCESS;
-
-        long total = 0;
         int lim = Math.min(Math.max(limit, 1), 100);
         int off = Math.max(offset, 0);
+        long total = 0;
         boolean hasNext = false;
+
+        GetOrdersResponse response = sweetbookApiClient.getOrders(lim, off);
+        String message = response.message();
+
         List<OrderSummaryItemDto> items = List.of();
 
-        Object dataObj = response.get("data");
+        Object dataObj = response.data();
         if (dataObj instanceof Map<?, ?> data) {
             // Sweetbook 실제 응답: data.orders + data.pagination
             Object paginationObj = data.get("pagination");
@@ -206,15 +143,11 @@ public class OrderV1ServiceImpl implements OrderV1Service {
         }
 
         OrdersListDataDto data = new OrdersListDataDto(total, lim, off, hasNext, items);
-        return new OrdersListApiResponse(success, message, data);
+        return new OrdersListApiResponse(response.success(), message, data);
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public Map<String, Object> getOrderDetail(Long memberId, String orderUid) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
+    public GetOrderDetailResponse getOrderDetail(Long memberId, String orderUid) {
         if (orderUid == null || orderUid.trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderUid가 비었습니다.");
         }
@@ -222,11 +155,7 @@ public class OrderV1ServiceImpl implements OrderV1Service {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public Map<String, Object> cancelOrder(Long memberId, String orderUid, String reason) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
+    public OrderCancelResponse cancelOrder(Long memberId, String orderUid, String reason) {
         if (orderUid == null || orderUid.trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderUid가 비었습니다.");
         }
@@ -238,12 +167,8 @@ public class OrderV1ServiceImpl implements OrderV1Service {
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public Map<String, Object> updateOrderShipping(
+    public SweetbookResponse updateOrderShipping(
             Long memberId, String orderUid, String recipientName, String address1) {
-        if (memberId == null || memberId <= 0) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
-        }
         if (orderUid == null || orderUid.trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderUid가 비었습니다.");
         }
@@ -260,49 +185,41 @@ public class OrderV1ServiceImpl implements OrderV1Service {
 
     private OrderSummaryItemDto toOrderSummaryItem(Object row) {
         if (!(row instanceof Map<?, ?> m)) {
-            return new OrderSummaryItemDto(null, 0, null, BigDecimal.ZERO, Instant.now());
+            return new OrderSummaryItemDto(null, 0, null, 0L, Instant.now());
         }
         String orderUid = m.get("orderUid") instanceof String s ? s : null;
         int orderStatus = m.get("orderStatus") instanceof Number n ? n.intValue() : 0;
         String orderStatusDisplay =
                 m.get("orderStatusDisplay") instanceof String s ? s : null;
-        BigDecimal totalAmount =
+        long totalAmount =
                 m.get("totalAmount") instanceof Number n
-                        ? BigDecimal.valueOf(n.doubleValue())
-                        : BigDecimal.ZERO;
+                        ? n.longValue()
+                        : 0L;
         Instant orderedAt = Instant.now();
         Object orderedAtObj = m.get("orderedAt");
         if (orderedAtObj instanceof String s && !s.isBlank()) {
             try {
                 orderedAt = Instant.parse(s);
             } catch (Exception ignored) {
-                // keep now fallback
             }
         }
         return new OrderSummaryItemDto(
                 orderUid, orderStatus, orderStatusDisplay, totalAmount, orderedAt);
     }
 
-    private BigDecimal computeTotalAmount(List<OrderLineRequest> items) {
-        BigDecimal sum = BigDecimal.ZERO;
+    private long computeTotalAmount(List<OrderLineRequest> items) {
+        long sum = 0L;
         for (OrderLineRequest line : items) {
             String uid = line.bookUid().trim();
             long unit =
                     sweetbookBookRepository
                             .findByBookUid(uid)
                             .map(SweetbookBook::getPrice)
-                            .filter(p -> p != null && p > 0)
+                            .filter(p -> p > 0)
                             .orElse(0L);
-            sum =
-                    sum.add(
-                            BigDecimal.valueOf(unit)
-                                    .multiply(BigDecimal.valueOf(line.quantity())));
+            sum += unit * line.quantity();
         }
         return sum;
     }
 
-    private static String newOrderUid() {
-        String hex = java.util.UUID.randomUUID().toString().replace("-", "");
-        return "or_" + hex.substring(0, Math.min(16, hex.length()));
-    }
 }

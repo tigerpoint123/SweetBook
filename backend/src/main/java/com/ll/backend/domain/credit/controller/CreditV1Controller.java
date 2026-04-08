@@ -5,6 +5,7 @@ import com.ll.backend.domain.credit.dto.CreditChargeApiResponse;
 import com.ll.backend.domain.credit.dto.CreditsApiResponse;
 import com.ll.backend.domain.credit.dto.CreditTransactionsApiResponse;
 import com.ll.backend.domain.credit.service.CreditService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,7 +31,7 @@ public class CreditV1Controller {
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     public CreditChargeApiResponse chargeCredit(
-            @RequestBody CreditChargeRequest body
+            @Valid @RequestBody CreditChargeRequest body
     ) {
         return creditService.chargeSandbox(body);
     }

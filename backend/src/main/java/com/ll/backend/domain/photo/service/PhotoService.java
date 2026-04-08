@@ -15,12 +15,6 @@ public interface PhotoService {
 
     List<LocalPhotoItemResponse> listSelectedForBook(String bookUid, Optional<Long> viewerMemberId);
 
-    /** {@code is_sample=true} 만, id 오름차순. 갤러리용 {@code fileUrl}은 항상 {@code /file}. */
-    List<LocalPhotoItemResponse> listSamplePhotosForBook(String bookUid);
-
-    /** {@code is_sample=false} 만, id 내림차순. {@code fileUrl}은 항상 원본 {@code /file}. */
-    List<LocalPhotoItemResponse> listNonSamplePhotosForBook(String bookUid, Optional<Long> viewerMemberId);
-
     /** 해당 북에서 id 오름차순 상위 3장만 {@code is_sample=true}, 나머지 false로 맞춥니다. */
     void recomputeSampleFlagsForBook(String bookUid);
 

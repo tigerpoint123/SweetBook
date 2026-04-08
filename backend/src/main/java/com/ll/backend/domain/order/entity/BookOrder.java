@@ -27,9 +27,13 @@ public class BookOrder {
     @Column(name = "book_uid", nullable = false, length = 128)
     private String bookUid;
 
+    @Column(name = "quantity", nullable = false)
+    private int quantity;
+
     @Builder
-    public BookOrder(Long memberId, String bookUid) {
+    public BookOrder(Long memberId, String bookUid, Integer quantity) {
         this.memberId = memberId;
         this.bookUid = bookUid;
+        this.quantity = quantity != null ? quantity : 1;
     }
 }

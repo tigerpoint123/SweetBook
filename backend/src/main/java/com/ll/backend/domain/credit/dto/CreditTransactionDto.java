@@ -1,6 +1,6 @@
 package com.ll.backend.domain.credit.dto;
 
-import com.ll.backend.global.client.dto.CreditTransactionItem;
+import com.ll.backend.global.client.dto.credit.CreditTransactionItem;
 
 public record CreditTransactionDto(
         String transactionId,

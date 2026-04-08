@@ -1,4 +1,4 @@
-package com.ll.backend.global.client.dto;
+package com.ll.backend.global.client.dto.book;
 
 public record CreateBookRequest(
         String title,

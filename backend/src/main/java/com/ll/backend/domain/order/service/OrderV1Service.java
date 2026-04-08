@@ -3,20 +3,23 @@ package com.ll.backend.domain.order.service;
 import com.ll.backend.domain.order.dto.CreateOrderRequest;
 import com.ll.backend.domain.order.dto.OrderEstimateRequest;
 import com.ll.backend.domain.order.dto.OrdersListApiResponse;
-import java.util.Map;
+import com.ll.backend.global.client.dto.order.OrderCancelResponse;
+import com.ll.backend.global.client.dto.order.CreateOrderResponse;
+import com.ll.backend.global.client.dto.order.GetOrderDetailResponse;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
 
 public interface OrderV1Service {
 
-    Map<String, Object> createOrder(Long memberId, CreateOrderRequest request);
+    CreateOrderResponse createOrder(Long memberId, CreateOrderRequest request);
 
-    Map<String, Object> estimateOrder(Long memberId, OrderEstimateRequest request);
+    SweetbookResponse estimateOrder(Long memberId, OrderEstimateRequest request);
 
     OrdersListApiResponse listOrders(Long memberId, int limit, int offset);
 
-    Map<String, Object> getOrderDetail(Long memberId, String orderUid);
+    GetOrderDetailResponse getOrderDetail(Long memberId, String orderUid);
 
-    Map<String, Object> cancelOrder(Long memberId, String orderUid, String reason);
+    OrderCancelResponse cancelOrder(Long memberId, String orderUid, String reason);
 
-    Map<String, Object> updateOrderShipping(
+    SweetbookResponse updateOrderShipping(
             Long memberId, String orderUid, String recipientName, String address1);
 }

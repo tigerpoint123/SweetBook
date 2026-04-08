@@ -7,6 +7,10 @@ import com.ll.backend.domain.order.dto.OrderEstimateRequest;
 import com.ll.backend.domain.order.dto.OrderShippingUpdateRequest;
 import com.ll.backend.domain.order.dto.OrdersListApiResponse;
 import com.ll.backend.domain.order.service.OrderV1Service;
+import com.ll.backend.global.client.dto.order.OrderCancelResponse;
+import com.ll.backend.global.client.dto.order.CreateOrderResponse;
+import com.ll.backend.global.client.dto.order.GetOrderDetailResponse;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
@@ -47,13 +51,12 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        var memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        var memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        int lim = Math.min(Math.max(limit, 1), 100);
-        int off = Math.max(offset, 0);
-        OrdersListApiResponse res = orderV1Service.listOrders(memberIdOpt.get(), lim, off);
+        } // HandlerMethodArgumentResolver
+
+        OrdersListApiResponse res = orderV1Service.listOrders(memberIdOpt.get(), limit, offset);
         return ResponseEntity.ok(res);
     }
 
@@ -65,12 +68,12 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result = orderV1Service.getOrderDetail(memberIdOpt.get(), orderUid);
+            GetOrderDetailResponse result = orderV1Service.getOrderDetail(memberIdOpt.get(), orderUid);
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
@@ -94,12 +97,12 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result =
+            OrderCancelResponse result =
                     orderV1Service.cancelOrder(memberIdOpt.get(), orderUid, body.reason());
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
@@ -124,12 +127,12 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result =
+            SweetbookResponse result =
                     orderV1Service.updateOrderShipping(
                             memberIdOpt.get(), orderUid, body.recipientName(), body.address1());
             return ResponseEntity.ok(result);
@@ -154,7 +157,7 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -165,16 +168,16 @@ public class OrderV1Controller {
                 body.shipping() != null ? body.shipping().recipientName() : null,
                 body.externalRef());
         try {
-            Map<String, Object> res = orderV1Service.createOrder(memberIdOpt.get(), body);
+            CreateOrderResponse res = orderV1Service.createOrder(memberIdOpt.get(), body);
             log.info(
                     "createOrder 응답 memberId={} success={} orderUid={}",
                     memberIdOpt.get(),
-                    res.get("success"),
+                    res.success(),
                     extractOrderUid(res));
             return ResponseEntity.ok(res);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
-            if (responseBody == null || responseBody.isBlank()) {
+            if (responseBody.isBlank()) {
                 return ResponseEntity.status(e.getStatusCode()).build();
             }
             return ResponseEntity.status(e.getStatusCode())
@@ -193,12 +196,12 @@ public class OrderV1Controller {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        Optional<Long> memberIdOpt = memberService.resolveMemberIdBySessionId(sessionId);
+        Optional<Long> memberIdOpt = memberService.getMemberIdBySessionId(sessionId);
         if (memberIdOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         try {
-            Map<String, Object> result = orderV1Service.estimateOrder(memberIdOpt.get(), body);
+            SweetbookResponse result = orderV1Service.estimateOrder(memberIdOpt.get(), body);
             return ResponseEntity.ok(result);
         } catch (WebClientResponseException e) {
             String responseBody = e.getResponseBodyAsString();
@@ -220,8 +223,8 @@ public class OrderV1Controller {
                 .toList();
     }
 
-    private static Object extractOrderUid(Map<String, Object> body) {
-        Object data = body.get("data");
+    private static Object extractOrderUid(CreateOrderResponse body) {
+        Object data = body.data();
         if (data instanceof Map<?, ?> m) {
             return m.get("orderUid");
         }

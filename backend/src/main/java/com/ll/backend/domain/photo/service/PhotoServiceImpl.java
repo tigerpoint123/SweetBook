@@ -11,15 +11,6 @@ import com.ll.backend.domain.photo.repository.PhotoRepository;
 import com.ll.backend.domain.photo.repository.SelectedPhotoRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -28,26 +19,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
+
 @Service
 @RequiredArgsConstructor
 public class PhotoServiceImpl implements PhotoService {
-
-    private static final int SAMPLE_PHOTO_COUNT = 3;
+    @Value("${app.photo.upload-dir:uploads/photos}")
+    private String uploadDir;
 
     private final PhotoRepository photoRepository;
     private final BookCoverRepository bookCoverRepository;
     private final SelectedPhotoRepository selectedPhotoRepository;
     private final SweetbookBookRepository sweetbookBookRepository;
 
-    @Value("${app.photo.upload-dir:uploads/photos}")
-    private String uploadDir;
+    private static final int SAMPLE_PHOTO_COUNT = 3;
 
     @Override
     public List<LocalPhotoItemResponse> list(Optional<String> bookUid, Optional<Long> viewerMemberId) {
+        Map<String, Long> priceByBookUid = new HashMap<>();
+
         Optional<String> uidOpt = bookUid.filter(s -> !s.isBlank());
-        List<Photo> photos =
-                uidOpt.map(photoRepository::findByBookUidOrderByIdDesc)
-                        .orElseGet(photoRepository::findAllByOrderByIdDesc);
+        List<Photo> photos = uidOpt.map(photoRepository::findByBookUidOrderByIdDesc)
+                .orElseGet(photoRepository::findAllByOrderByIdDesc);
+
         if (uidOpt.isPresent()) {
             Long bookPrice =
                     sweetbookBookRepository
@@ -56,7 +53,7 @@ public class PhotoServiceImpl implements PhotoService {
                             .orElse(null);
             return photos.stream().map(p -> toItem(p, bookPrice)).toList();
         }
-        Map<String, Long> priceByBookUid = new HashMap<>();
+
         return photos.stream()
                 .map(
                         p ->
@@ -73,44 +70,14 @@ public class PhotoServiceImpl implements PhotoService {
     }
 
     @Override
-    public List<LocalPhotoItemResponse> listSamplePhotosForBook(String bookUid) {
-        Objects.requireNonNull(bookUid, "bookUid");
-        String uid = bookUid.trim();
-        if (uid.isEmpty()) {
-            return List.of();
-        }
-        Long bookPrice =
-                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
-        return photoRepository.findSamplesByBookUidOrderByIdAsc(uid).stream()
-                .map(p -> toItem(p, bookPrice))
-                .toList();
-    }
-
-    @Override
-    public List<LocalPhotoItemResponse> listNonSamplePhotosForBook(String bookUid, Optional<Long> viewerMemberId) {
-        Objects.requireNonNull(bookUid, "bookUid");
-        String uid = bookUid.trim();
-        if (uid.isEmpty()) {
-            return List.of();
-        }
-        Long bookPrice =
-                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
-        return photoRepository.findNonSamplesByBookUidOrderByIdDesc(uid).stream()
-                .map(p -> toItem(p, bookPrice))
-                .toList();
-    }
-
-    @Override
     public List<LocalPhotoItemResponse> listSelectedForBook(String bookUid, Optional<Long> viewerMemberId) {
-        Objects.requireNonNull(bookUid, "bookUid");
-        String uid = bookUid.trim();
-        if (uid.isEmpty()) {
-            return List.of();
-        }
-        Long bookPrice =
-                sweetbookBookRepository.findByBookUid(uid).map(SweetbookBook::getPrice).orElse(null);
         List<LocalPhotoItemResponse> out = new ArrayList<>();
-        for (SelectedPhoto sp : selectedPhotoRepository.findAllByBookUidOrderByIdAsc(uid)) {
+
+        Long bookPrice = sweetbookBookRepository.findByBookUid(bookUid)
+                .map(SweetbookBook::getPrice)
+                .orElse(null);
+
+        for (SelectedPhoto sp : selectedPhotoRepository.findAllByBookUidOrderByIdAsc(bookUid)) {
             photoRepository
                     .findById(sp.getPhotoId())
                     .ifPresent(

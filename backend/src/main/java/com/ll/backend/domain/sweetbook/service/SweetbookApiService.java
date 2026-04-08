@@ -1,15 +1,18 @@
 package com.ll.backend.domain.sweetbook.service;
 
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
-import com.ll.backend.global.client.dto.AddBookContentsRequest;
-import com.ll.backend.global.client.dto.BookGalleryData;
-import com.ll.backend.global.client.dto.BookPhotosData;
-import com.ll.backend.global.client.dto.BooksListData;
-import com.ll.backend.global.client.dto.CreateBookRequest;
-import com.ll.backend.global.client.dto.PhotoUploadData;
-import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.AddBookContentsRequest;
+import com.ll.backend.global.client.dto.book.AddBookContentsResponse;
+import com.ll.backend.global.client.dto.book.BookGalleryData;
+import com.ll.backend.global.client.dto.book.BookPhotosData;
+import com.ll.backend.global.client.dto.book.BooksListData;
+import com.ll.backend.global.client.dto.book.CreateBookRequest;
+import com.ll.backend.global.client.dto.book.CreateBookResponseData;
+import com.ll.backend.global.client.dto.photo.PhotoUploadData;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
+import com.ll.backend.global.client.dto.book.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.SweetbookApiResponse;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,10 +23,9 @@ public interface SweetbookApiService {
             Integer offset,
             String pdfStatusIn,
             String createdFrom,
-            String createdTo,
-            boolean finalizedOnly);
+            String createdTo);
 
-    Map<String, Object> createBook(CreateBookRequest request, Optional<Long> memberId);
+    SweetbookApiResponse<CreateBookResponseData> createBook(CreateBookRequest request, Optional<Long> memberId);
 
     List<MyBookItemResponse> listBooksOwnedByMember(Long memberId);
 
@@ -33,20 +35,20 @@ public interface SweetbookApiService {
 
     SweetbookApiEnvelope<PhotoUploadData> uploadPhoto(String bookUid, MultipartFile file);
 
-    Map<String, Object> uploadBookCover(
+    SweetbookResponse uploadBookCover(
             String bookUid,
             String templateUid,
             String parametersJson,
             MultipartFile coverPhoto,
             MultipartFile backPhoto);
 
-    Map<String, Object> addBookContents(String bookUid, AddBookContentsRequest request, Long memberId);
+    AddBookContentsResponse addBookContents(String bookUid, AddBookContentsRequest request, Long memberId);
 
-    Map<String, Object> deleteBook(String bookUid, Long memberId);
+    SweetbookResponse deleteBook(String bookUid, Long memberId);
 
     /** Sweetbook DELETE /v1/books/{bookUid}/photos/{fileName} — 북 소유자만, 로컬 DB에 동일 fileName 행이 있을 때 */
-    Map<String, Object> deleteBookPhoto(String bookUid, String fileName, Long memberId);
+    SweetbookResponse deleteBookPhoto(String bookUid, String fileName, Long memberId);
 
     /** Sweetbook POST /v1/books/{bookUid}/finalization — 북 소유자만. 성공 시 로컬 {@code sweetbook_book}에 {@code price} 반영. */
-    Map<String, Object> finalizeBook(String bookUid, Long memberId, long price);
+    SweetbookResponse finalizeBook(String bookUid, Long memberId, long price);
 }

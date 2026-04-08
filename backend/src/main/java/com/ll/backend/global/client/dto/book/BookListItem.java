@@ -1,4 +1,4 @@
-package com.ll.backend.global.client.dto;
+package com.ll.backend.global.client.dto.book;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;

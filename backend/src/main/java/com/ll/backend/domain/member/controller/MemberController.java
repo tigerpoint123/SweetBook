@@ -56,7 +56,7 @@ public class MemberController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Optional<String> usernameOpt = memberService.resolveUsernameBySessionId(sessionId);
+        Optional<String> usernameOpt = memberService.getUsernameBySessionId(sessionId);
         return usernameOpt
                 .map(username -> ResponseEntity.ok(new MemberInfo(username)))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());

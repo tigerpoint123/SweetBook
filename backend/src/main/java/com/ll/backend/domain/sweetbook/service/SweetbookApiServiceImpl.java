@@ -10,25 +10,29 @@ import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
 import com.ll.backend.domain.sweetbook.support.SweetbookCreateResponseParser;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
 import com.ll.backend.global.client.SweetbookApiClient;
+import com.ll.backend.global.client.dto.book.AddBookContentsResponse;
 import com.ll.backend.global.storage.LocalPhotoStorage;
-import com.ll.backend.global.client.dto.AddBookContentsRequest;
-import com.ll.backend.global.client.dto.BookGalleryData;
-import com.ll.backend.global.client.dto.BookPhotoItem;
-import com.ll.backend.global.client.dto.BookPhotosData;
-import com.ll.backend.global.client.dto.BooksListData;
-import com.ll.backend.global.client.dto.CreateBookRequest;
-import com.ll.backend.global.client.dto.PhotoUploadData;
-import com.ll.backend.global.client.dto.PhotoUploadOutcome;
-import com.ll.backend.global.client.dto.BookListItem;
-import com.ll.backend.global.client.dto.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.AddBookContentsRequest;
+import com.ll.backend.global.client.dto.book.BookGalleryData;
+import com.ll.backend.global.client.dto.book.BookPhotoItem;
+import com.ll.backend.global.client.dto.book.BookPhotosData;
+import com.ll.backend.global.client.dto.book.BooksListData;
+import com.ll.backend.global.client.dto.book.CreateBookRequest;
+import com.ll.backend.global.client.dto.book.CreateBookResponseData;
+import com.ll.backend.global.client.dto.photo.PhotoUploadData;
+import com.ll.backend.global.client.dto.photo.PhotoUploadOutcome;
+import com.ll.backend.global.client.dto.book.BookListItem;
+import com.ll.backend.global.client.dto.book.SweetbookResponse;
+import com.ll.backend.global.client.dto.book.SweetbookApiEnvelope;
+import com.ll.backend.global.client.dto.book.SweetbookApiResponse;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -56,10 +60,8 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
             Integer offset,
             String pdfStatusIn,
             String createdFrom,
-            String createdTo,
-            boolean finalizedOnly) {
-        SweetbookApiEnvelope<BooksListData> envelope =
-                sweetbookApiClient.listBooks(limit, offset, pdfStatusIn, createdFrom, createdTo);
+            String createdTo) {
+        SweetbookApiEnvelope<BooksListData> envelope = sweetbookApiClient.listBooks(limit, offset, pdfStatusIn, createdFrom, createdTo);
         if (envelope == null || envelope.data() == null) {
             return envelope;
         }
@@ -70,26 +72,16 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                     envelope.success(),
                     new BooksListData(List.of(), data.total(), data.limit(), data.offset()));
         }
-        if (finalizedOnly) {
-            Set<String> finalizedUids =
-                    sweetbookBookRepository.findAllByFinalizedAtIsNotNull().stream()
-                            .map(SweetbookBook::getBookUid)
-                            .collect(Collectors.toSet());
-            List<BookListItem> filtered =
-                    books.stream().filter(b -> finalizedUids.contains(b.bookUid())).toList();
-            return new SweetbookApiEnvelope<>(
-                    envelope.success(),
-                    new BooksListData(filtered, filtered.size(), data.limit(), data.offset()));
-        }
         return envelope;
     }
 
     @Override
-    public Map<String, Object> createBook(CreateBookRequest request, Optional<Long> memberId) {
-        Map<String, Object> response = sweetbookApiClient.createBook(request);
-        memberId.filter(id -> id != null && id > 0)
+    public SweetbookApiResponse<CreateBookResponseData> createBook(
+            CreateBookRequest request, Optional<Long> memberId) {
+        SweetbookApiResponse<CreateBookResponseData> response = sweetbookApiClient.createBook(request);
+        memberId.filter(id -> id > 0)
                 .ifPresent(
-                        id -> SweetbookCreateResponseParser.extractBookUid(response)
+                        id -> SweetbookCreateResponseParser.extractBookUid(response.data())
                                 .ifPresent(uid -> sweetbookBookRepository.save(
                                         SweetbookBook.builder().memberId(id).bookUid(uid).build())));
         return response;
@@ -144,17 +136,18 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
     }
 
     @Override
-    public Map<String, Object> uploadBookCover(
+    public SweetbookResponse uploadBookCover(
             String bookUid,
             String templateUid,
             String parametersJson,
             MultipartFile coverPhoto,
             MultipartFile backPhoto) {
-        return sweetbookApiClient.uploadBookCover(bookUid, templateUid, parametersJson, coverPhoto, backPhoto);
+        return sweetbookApiClient.uploadBookCover(
+                bookUid, templateUid, parametersJson, coverPhoto, backPhoto);
     }
 
     @Override
-    public Map<String, Object> addBookContents(String bookUid, AddBookContentsRequest request, Long memberId) {
+    public AddBookContentsResponse addBookContents(String bookUid, AddBookContentsRequest request, Long memberId) {
         Objects.requireNonNull(bookUid, "bookUid");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(memberId, "memberId");
@@ -167,7 +160,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     @Override
     @Transactional
-    public Map<String, Object> deleteBook(String bookUid, Long memberId) {
+    public SweetbookResponse deleteBook(String bookUid, Long memberId) {
         Objects.requireNonNull(bookUid, "bookUid");
         Objects.requireNonNull(memberId, "memberId");
         if (memberId <= 0) {
@@ -177,8 +170,8 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "이 북을 삭제할 권한이 없습니다.");
         }
-        Map<String, Object> response = sweetbookApiClient.deleteBook(bookUid);
-        if (Boolean.TRUE.equals(response.get("success"))) {
+        SweetbookResponse response = sweetbookApiClient.deleteBook(bookUid);
+        if (response.success()) {
             sweetbookBookRepository.deleteByBookUidAndMemberId(bookUid, memberId);
         }
         return response;
@@ -186,9 +179,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     @Override
     @Transactional
-    public Map<String, Object> deleteBookPhoto(String bookUid, String fileName, Long memberId) {
-        Objects.requireNonNull(bookUid, "bookUid");
-        Objects.requireNonNull(fileName, "fileName");
+    public SweetbookResponse deleteBookPhoto(String bookUid, String fileName, Long memberId) {
         Objects.requireNonNull(memberId, "memberId");
         if (memberId <= 0) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다.");
@@ -204,7 +195,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                         .orElseThrow(
                                 () -> new ResponseStatusException(
                                         HttpStatus.NOT_FOUND, "해당 북·파일명의 로컬 사진 기록이 없습니다."));
-        Map<String, Object> response = sweetbookApiClient.deleteBookPhoto(bookUid, name);
+        SweetbookResponse response = sweetbookApiClient.deleteBookPhoto(bookUid, name);
         bookCoverRepository
                 .findByBookUid(bookUid)
                 .filter(bc -> bc.getPhotoId().equals(photo.getId()))
@@ -223,7 +214,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     @Override
     @Transactional
-    public Map<String, Object> finalizeBook(String bookUid, Long memberId, long price) {
+    public SweetbookResponse finalizeBook(String bookUid, Long memberId, long price) {
         Objects.requireNonNull(bookUid, "bookUid");
         Objects.requireNonNull(memberId, "memberId");
         if (memberId <= 0) {
@@ -236,9 +227,9 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "이 북을 최종화할 권한이 없습니다.");
         }
-        Map<String, Object> response = sweetbookApiClient.finalizeBook(bookUid);
-        if (Boolean.TRUE.equals(response.get("success"))) {
-            Instant at = parseFinalizedAtFromSweetbookResponse(response);
+        SweetbookResponse response = sweetbookApiClient.finalizeBook(bookUid);
+        if (response.success()) {
+            Instant at = parseFinalizedAtFromSweetbookResponse(response.data());
             sweetbookBookRepository
                     .findByBookUidAndMemberId(bookUid, memberId)
                     .ifPresent(
@@ -264,9 +255,9 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
         }
     }
 
-    private static Instant parseFinalizedAtFromSweetbookResponse(Map<String, Object> response) {
-        Object data = response.get("data");
-        if (data instanceof Map<?, ?> m) {
+    private static Instant parseFinalizedAtFromSweetbookResponse(Map<String, Object> data) {
+        if (data != null) {
+            Map<?, ?> m = data;
             Object fa = m.get("finalizedAt");
             if (fa instanceof String s && !s.isBlank()) {
                 try {

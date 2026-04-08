@@ -10,4 +10,5 @@ import java.util.List;
 public record CreateOrderRequest(
         @NotEmpty @Valid List<OrderLineRequest> items,
         @NotNull @Valid OrderShippingRequest shipping,
-        String externalRef) {}
+        @NotNull String externalRef
+) {}

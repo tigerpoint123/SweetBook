@@ -10,4 +10,5 @@ public record OrderShippingRequest(
         @NotBlank String postalCode,
         @NotBlank String address1,
         String address2,
-        String memo) {}
+        String memo
+) {}

@@ -1,5 +1,7 @@
 package com.ll.backend.domain.order.entity;
 
+import com.ll.backend.domain.order.dto.CreateOrderRequest;
+import com.ll.backend.domain.order.dto.OrderShippingRequest;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -96,5 +99,60 @@ public class ShopOrder {
     public void addLine(ShopOrderLine line) {
         lines.add(line);
         line.assignOrder(this);
+    }
+
+    public static ShopOrder create(
+            Long memberId,
+            CreateOrderRequest request,
+            Object responseData,
+            int defaultOrderStatus,
+            long fallbackTotalAmount) {
+        String externalRef = request != null && request.externalRef() != null
+                ? request.externalRef().trim()
+                : null;
+        OrderShippingRequest shipping = request != null ? request.shipping() : null;
+        String recipientName = shipping != null ? shipping.recipientName() : "";
+        String recipientPhone = shipping != null ? shipping.recipientPhone() : "";
+        String postalCode = shipping != null ? shipping.postalCode() : "";
+        String address1 = shipping != null ? shipping.address1() : "";
+        String address2 = shipping != null ? shipping.address2() : "";
+        String shippingMemo = shipping != null ? shipping.memo() : "";
+
+        String orderUid = newOrderUid();
+        int orderStatus = defaultOrderStatus;
+        long totalAmount = fallbackTotalAmount;
+        if (responseData instanceof Map<?, ?> data) {
+            Object uid = data.get("orderUid");
+            if (uid instanceof String sUid && !sUid.isBlank()) {
+                orderUid = sUid;
+            }
+            Object status = data.get("orderStatus");
+            if (status instanceof Number n) {
+                orderStatus = n.intValue();
+            }
+            Object amount = data.get("totalAmount");
+            if (amount instanceof Number n) {
+                totalAmount = n.longValue();
+            }
+        }
+
+        return ShopOrder.builder()
+                .memberId(memberId)
+                .externalRef(externalRef)
+                .recipientName(recipientName != null ? recipientName.trim() : "")
+                .recipientPhone(recipientPhone != null ? recipientPhone.trim() : "")
+                .postalCode(postalCode != null ? postalCode.trim() : "")
+                .address1(address1 != null ? address1.trim() : "")
+                .address2(address2 == null || address2.isBlank() ? null : address2)
+                .shippingMemo(shippingMemo == null || shippingMemo.isBlank() ? null : shippingMemo)
+                .orderUid(orderUid)
+                .orderStatus(orderStatus)
+                .totalAmount(BigDecimal.valueOf(totalAmount))
+                .build();
+    }
+
+    private static String newOrderUid() {
+        String hex = java.util.UUID.randomUUID().toString().replace("-", "");
+        return "or_" + hex.substring(0, Math.min(16, hex.length()));
     }
 }

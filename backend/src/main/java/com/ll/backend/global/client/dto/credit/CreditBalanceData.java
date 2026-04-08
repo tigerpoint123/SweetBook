@@ -1,4 +1,4 @@
-package com.ll.backend.global.client.dto;
+package com.ll.backend.global.client.dto.credit;
 
 import com.ll.backend.domain.credit.dto.CreditsDataDto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;

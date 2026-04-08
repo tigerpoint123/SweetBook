@@ -38,7 +38,7 @@ public class PhotoController {
         if (sessionId == null || sessionId.isBlank()) {
             return Optional.empty();
         }
-        return memberService.resolveMemberIdBySessionId(sessionId);
+        return memberService.getMemberIdBySessionId(sessionId);
     }
 
     @GetMapping
@@ -55,21 +55,7 @@ public class PhotoController {
         return photoService.list(Optional.of(bookUid), memberIdFromSession(sessionId));
     }
 
-    /** 갤러리 분할 조회 1: 샘플(상위 3)만, {@code fileUrl} 항상 원본 {@code /file} */
-    @GetMapping("/books/{bookUid}/sample-photos")
-    public List<LocalPhotoItemResponse> listSamplePhotosForBook(@PathVariable String bookUid) {
-        return photoService.listSamplePhotosForBook(bookUid);
-    }
-
-    /** 갤러리 분할 조회 2: 비샘플만, {@code fileUrl} 항상 원본 {@code /file} */
-    @GetMapping("/books/{bookUid}/non-sample-photos")
-    public List<LocalPhotoItemResponse> listNonSamplePhotosForBook(
-            @PathVariable String bookUid,
-            @CookieValue(name = SESSION_COOKIE_NAME, required = false) String sessionId) {
-        return photoService.listNonSamplePhotosForBook(bookUid, memberIdFromSession(sessionId));
-    }
-
-    /** 사진 채택으로 북 넘김에 쓸 사진만 (selected_photo.id 오름차순 — 최근 채택이 맨 뒤) */
+    // 채택된 사진. 책 모션에 나오는 이미지들
     @GetMapping("/books/{bookUid}/selected")
     public ResponseEntity<List<LocalPhotoItemResponse>> listSelectedByBook(
             @PathVariable String bookUid,

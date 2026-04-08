@@ -27,6 +27,28 @@ public class MemberServiceImpl implements MemberService {
         return new MemberLoginResult(true, "로그인 성공", sessionId);
     }
 
+    @Override
+    public Optional<String> getUsernameBySessionId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(sessionIdToUsername.get(sessionId));
+    }
+
+    @Override
+    public Optional<Long> getMemberIdBySessionId(String sessionId) {
+        return getUsernameBySessionId(sessionId)
+                .flatMap(memberRepository::findByUsername)
+                .map(Member::getId);
+    }
+
+    @Override
+    public void postMember(String username, String password) {
+        String encoded = passwordEncoder.encode(password);
+        Member member = new Member(username, encoded);
+        memberRepository.save(member);
+    }
+
     private boolean credentialsMatch(String username, String rawPassword) {
         return memberRepository
                 .findByUsername(username)
@@ -49,40 +71,13 @@ public class MemberServiceImpl implements MemberService {
         return stored.length() >= 7
                 && stored.charAt(0) == '$'
                 && (stored.startsWith("$2a$")
-                        || stored.startsWith("$2b$")
-                        || stored.startsWith("$2y$"));
+                || stored.startsWith("$2b$")
+                || stored.startsWith("$2y$"));
     }
 
     private String issueSessionId(String username) {
         String sessionId = UUID.randomUUID().toString();
         sessionIdToUsername.put(sessionId, username);
         return sessionId;
-    }
-
-    @Override
-    public Optional<String> resolveUsernameBySessionId(String sessionId) {
-        if (sessionId == null || sessionId.isBlank()) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(sessionIdToUsername.get(sessionId));
-    }
-
-    @Override
-    public Optional<Long> resolveMemberIdBySessionId(String sessionId) {
-        return resolveUsernameBySessionId(sessionId)
-                .flatMap(memberRepository::findByUsername)
-                .map(Member::getId);
-    }
-
-    @Override
-    public Member getMemberInfo() {
-        return null;
-    }
-
-    @Override
-    public void postMember(String username, String password) {
-        String encoded = passwordEncoder.encode(password);
-        Member member = new Member(username, encoded);
-        memberRepository.save(member);
     }
 }

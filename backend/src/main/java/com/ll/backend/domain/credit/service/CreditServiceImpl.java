@@ -1,20 +1,15 @@
 package com.ll.backend.domain.credit.service;
 
 import com.ll.backend.domain.credit.dto.CreditChargeApiResponse;
-import com.ll.backend.domain.credit.dto.CreditChargeDataDto;
 import com.ll.backend.domain.credit.dto.CreditChargeRequest;
-import com.ll.backend.domain.credit.dto.CreditTransactionDto;
 import com.ll.backend.domain.credit.dto.CreditsApiResponse;
 import com.ll.backend.domain.credit.dto.CreditTransactionsApiResponse;
-import com.ll.backend.domain.credit.dto.CreditTransactionsDataDto;
-import com.ll.backend.global.client.dto.CreditBalanceData;
-import com.ll.backend.global.client.dto.CreditChargeData;
-import com.ll.backend.global.client.dto.CreditTransactionsData;
-import com.ll.backend.global.client.dto.SweetbookApiResponse;
+import com.ll.backend.global.client.dto.credit.CreditBalanceData;
+import com.ll.backend.global.client.dto.credit.CreditChargeData;
+import com.ll.backend.global.client.dto.credit.CreditChargeRequestPayload;
+import com.ll.backend.global.client.dto.credit.CreditTransactionsData;
+import com.ll.backend.global.client.dto.book.SweetbookApiResponse;
 import com.ll.backend.global.client.SweetbookApiClient;
-
-import java.util.List;
-import java.util.Map;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,14 +27,7 @@ public class CreditServiceImpl implements CreditService {
     @Override
     public synchronized CreditsApiResponse getCredits() {
         SweetbookApiResponse<CreditBalanceData> response = sweetbookApiClient.getCredits();
-        boolean success = response.success();
-        String message = response.message();
-        CreditBalanceData data = CreditBalanceData.fromNullable(response.data());
-
-        return new CreditsApiResponse(
-                success,
-                message,
-                data.toDto());
+        return CreditsApiResponse.from(response);
     }
 
     @Override
@@ -47,25 +35,11 @@ public class CreditServiceImpl implements CreditService {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "요청 본문이 필요합니다.");
         }
-        if (request.amount() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount은 1 이상이어야 합니다.");
-        }
-        String memo = request.memo() != null ? request.memo().trim() : "";
 
         SweetbookApiResponse<CreditChargeData> response =
-                sweetbookApiClient.chargeSandboxCredit(Map.of("amount", request.amount(), "memo", memo));
+                sweetbookApiClient.chargeSandboxCredit(new CreditChargeRequestPayload(request.amount(), request.memo()));
         validateChargeSandboxResponse(response);
-
-        CreditChargeData data = response.data();
-
-        return new CreditChargeApiResponse(
-                response.success(),
-                response.message(),
-                new CreditChargeDataDto(
-                        data.transactionUid(),
-                        data.amount(),
-                        data.balanceAfter(),
-                        data.currency()));
+        return CreditChargeApiResponse.from(response);
     }
 
     @Override
@@ -73,21 +47,7 @@ public class CreditServiceImpl implements CreditService {
         SweetbookApiResponse<CreditTransactionsData> response =
                 sweetbookApiClient.getCreditTransactions(10, 0);
         validateCreditTransactionsResponse(response);
-
-        CreditTransactionsData data = response.data();
-        List<CreditTransactionDto> transactions = data.transactions()
-                .stream()
-                .map(CreditTransactionDto::from)
-                .toList();
-
-        return new CreditTransactionsApiResponse(
-                response.success(),
-                response.message(),
-                new CreditTransactionsDataDto(
-                        transactions,
-                        data.total(),
-                        data.limit(),
-                        data.offset()));
+        return CreditTransactionsApiResponse.from(response);
     }
 
     private static void validateChargeSandboxResponse(SweetbookApiResponse<CreditChargeData> response) {
@@ -112,8 +72,7 @@ public class CreditServiceImpl implements CreditService {
         }
     }
 
-    private static void validateCreditTransactionsResponse(
-            SweetbookApiResponse<CreditTransactionsData> response) {
+    private static void validateCreditTransactionsResponse(SweetbookApiResponse<CreditTransactionsData> response) {
         if (response == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "거래내역 응답이 비어 있습니다.");
         }
