@@ -517,7 +517,7 @@ public class SweetbookApiClient {
             String originalPath = null;
             if (response != null && response.success() && response.data() != null) {
                 SavedPaths paths = saveUploadedPhotoLocally(bookUid, bytes, filename);
-                originalPath = paths.originalAbsolutePath();
+                originalPath = paths.originalRelativePath();
             }
             return new PhotoUploadOutcome(response, originalPath);
         } catch (WebClientResponseException e) {

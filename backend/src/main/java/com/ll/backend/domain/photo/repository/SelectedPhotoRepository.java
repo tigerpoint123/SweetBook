@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SelectedPhotoRepository extends JpaRepository<SelectedPhoto, Long> {
 
+    boolean existsByBookUid(String bookUid);
+
     List<SelectedPhoto> findAllByBookUidOrderByIdAsc(String bookUid);
 
     void deleteByPhotoId(Long photoId);

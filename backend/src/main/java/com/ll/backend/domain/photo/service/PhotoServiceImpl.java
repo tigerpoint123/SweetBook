@@ -11,6 +11,7 @@ import com.ll.backend.domain.photo.repository.PhotoRepository;
 import com.ll.backend.domain.photo.repository.SelectedPhotoRepository;
 import com.ll.backend.domain.sweetbook.entity.SweetbookBook;
 import com.ll.backend.domain.sweetbook.repository.SweetbookBookRepository;
+import com.ll.backend.global.storage.LocalPhotoStorage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -34,8 +35,6 @@ public class PhotoServiceImpl implements PhotoService {
     private final BookCoverRepository bookCoverRepository;
     private final SelectedPhotoRepository selectedPhotoRepository;
     private final SweetbookBookRepository sweetbookBookRepository;
-
-    private static final int SAMPLE_PHOTO_COUNT = 3;
 
     @Override
     public List<LocalPhotoItemResponse> list(Optional<String> bookUid, Optional<Long> viewerMemberId) {
@@ -89,23 +88,6 @@ public class PhotoServiceImpl implements PhotoService {
 
     @Override
     @Transactional
-    public void recomputeSampleFlagsForBook(String bookUid) {
-        if (bookUid == null || bookUid.isBlank()) {
-            return;
-        }
-        List<Photo> asc = photoRepository.findByBookUidOrderByIdAsc(bookUid.trim());
-        for (int i = 0; i < asc.size(); i++) {
-            boolean wantSample = i < SAMPLE_PHOTO_COUNT;
-            Photo p = asc.get(i);
-            if (p.isSample() != wantSample) {
-                p.setSample(wantSample);
-                photoRepository.save(p);
-            }
-        }
-    }
-
-    @Override
-    @Transactional
     public void appendBookSelection(String bookUid, List<Long> photoIds) {
         Objects.requireNonNull(bookUid, "bookUid");
         String uid = bookUid.trim();
@@ -135,7 +117,8 @@ public class PhotoServiceImpl implements PhotoService {
     }
 
     private ServedPhoto serveOriginalFile(Photo photo) {
-        Path path = Paths.get(photo.getLocalPath()).normalize();
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = LocalPhotoStorage.resolveStoredPath(photo.getLocalPath(), root);
         validateUnderRoot(path);
         return buildServed(photo, path);
     }
@@ -148,7 +131,7 @@ public class PhotoServiceImpl implements PhotoService {
 
     private void validateUnderRoot(Path path) {
         Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
-        if (!path.toAbsolutePath().normalize().startsWith(root)) {
+        if (!path.normalize().startsWith(root)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "invalid path");
         }
     }
@@ -220,12 +203,6 @@ public class PhotoServiceImpl implements PhotoService {
                 p.getHash(),
                 p.isDuplicate(),
                 fileUrl,
-                p.isSample(),
-                bookPrice,
-                nonBlankOrDefault(p.getOriginalUrl(), fileUrl));
-    }
-
-    private static String nonBlankOrDefault(String v, String def) {
-        return v != null && !v.isBlank() ? v : def;
+                bookPrice);
     }
 }

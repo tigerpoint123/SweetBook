@@ -64,12 +64,6 @@ public class CreditServiceImpl implements CreditService {
         if (data == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "충전 응답 data가 비어 있습니다.");
         }
-        if (data.amount() == null || data.amount() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "충전 응답 amount가 올바르지 않습니다.");
-        }
-        if (data.balanceAfter() == null || data.balanceAfter() < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "충전 응답 balanceAfter가 올바르지 않습니다.");
-        }
     }
 
     private static void validateCreditTransactionsResponse(SweetbookApiResponse<CreditTransactionsData> response) {

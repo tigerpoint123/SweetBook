@@ -21,6 +21,13 @@ import {
   type OrdersListEnvelope,
 } from "@/lib/order-api";
 import {
+  fetchBookCovers,
+  fetchLocalPhotos,
+  type BookCoverItem,
+  type LocalPhotoItem,
+} from "@/lib/photo-api";
+import {
+  applySavedBookCoverUrls,
   buildBookCoverRows,
   deleteSweetbookBook,
   fetchBooksList,
@@ -68,10 +75,14 @@ export default function MyPage() {
   const [chargePending, setChargePending] = useState(false);
   const [chargeMessage, setChargeMessage] = useState<string | null>(null);
 
-  const bookCoverRows = useMemo(
-    () => (books == null ? null : buildBookCoverRows(books, [])),
-    [books]
-  );
+  const [bookCovers, setBookCovers] = useState<BookCoverItem[]>([]);
+  const [localPhotos, setLocalPhotos] = useState<LocalPhotoItem[]>([]);
+
+  const bookCoverRows = useMemo(() => {
+    if (books == null) return null;
+    const base = buildBookCoverRows(books, localPhotos);
+    return applySavedBookCoverUrls(base, bookCovers);
+  }, [books, localPhotos, bookCovers]);
 
   const reloadMergedBooks = useCallback(async () => {
     const myRes = await fetchMyBookEntries();
@@ -83,11 +94,17 @@ export default function MyPage() {
       const t = await myRes.text();
       setError(t || `내 책 목록 조회 실패 (${myRes.status})`);
       setBooks({ success: true, data: { books: [] } });
+      setBookCovers([]);
+      setLocalPhotos([]);
       return;
     }
     const myEntries = (await myRes.json()) as MyBookEntry[];
 
-    const booksRes = await fetchBooksList({ limit: 100, offset: 0 });
+    const [booksRes, coversRes, photosRes] = await Promise.all([
+      fetchBooksList({ limit: 100, offset: 0 }),
+      fetchBookCovers(),
+      fetchLocalPhotos(),
+    ]);
     let envelope: BooksListEnvelope | null = null;
     if (booksRes.ok) {
       try {
@@ -98,6 +115,29 @@ export default function MyPage() {
     } else {
       setError(`Sweetbook 책 목록 조회 실패 (${booksRes.status})`);
     }
+
+    if (coversRes.ok) {
+      try {
+        const data = (await coversRes.json()) as BookCoverItem[];
+        setBookCovers(Array.isArray(data) ? data : []);
+      } catch {
+        setBookCovers([]);
+      }
+    } else {
+      setBookCovers([]);
+    }
+
+    if (photosRes.ok) {
+      try {
+        const data = (await photosRes.json()) as LocalPhotoItem[];
+        setLocalPhotos(Array.isArray(data) ? data : []);
+      } catch {
+        setLocalPhotos([]);
+      }
+    } else {
+      setLocalPhotos([]);
+    }
+
     const merged = mergeMyBooksWithSweetbookList(myEntries, envelope);
     setBooks({ success: true, data: { books: merged } });
   }, [router]);

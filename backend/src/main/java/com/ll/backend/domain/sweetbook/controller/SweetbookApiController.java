@@ -3,7 +3,6 @@ package com.ll.backend.domain.sweetbook.controller;
 import com.ll.backend.domain.member.service.MemberService;
 import com.ll.backend.domain.sweetbook.dto.FinalizeBookRequest;
 import com.ll.backend.domain.sweetbook.service.SweetbookApiService;
-import com.ll.backend.domain.sweetbook.support.SweetbookCoverDefaults;
 import com.ll.backend.domain.sweetbook.vo.MyBookItemResponse;
 import com.ll.backend.global.client.dto.book.AddBookContentsRequest;
 import com.ll.backend.global.client.dto.book.AddBookContentsResponse;
@@ -23,6 +22,7 @@ import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -46,9 +46,12 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 @Slf4j
 public class SweetbookApiController {
     private static final String SESSION_COOKIE_NAME = "SESSION";
+    @Value("${sweetbook.cover.template-uid}")
+    private String coverTemplateUid;
 
     private final SweetbookApiService sweetbookApiService;
     private final MemberService memberService;
+
 
     @GetMapping(value = "/books", produces = MediaType.APPLICATION_JSON_VALUE)
     public SweetbookApiEnvelope<BooksListData> listBooks(
@@ -243,11 +246,9 @@ public class SweetbookApiController {
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public SweetbookResponse uploadBookCover(
-            @PathVariable String bookUid, MultipartHttpServletRequest request) {
-        String templateUid = Optional.ofNullable(request.getParameter("templateUid"))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .orElse(SweetbookCoverDefaults.TEMPLATE_UID);
+            @PathVariable String bookUid,
+            MultipartHttpServletRequest request
+    ) {
         String parametersJson = request.getParameter("parameters");
 
         MultipartFile coverPhoto = request.getFile("coverPhoto");
@@ -260,9 +261,9 @@ public class SweetbookApiController {
         log.info(
                 "uploadBookCover 수신 bookUid={}, templateUid={}, coverSize={}, backPresent={}",
                 bookUid,
-                templateUid,
+                coverTemplateUid,
                 coverPhoto.getSize(),
                 hasBack);
-        return sweetbookApiService.uploadBookCover(bookUid, templateUid, parametersJson, coverPhoto, backPhoto);
+        return sweetbookApiService.uploadBookCover(bookUid, coverTemplateUid, parametersJson, coverPhoto, backPhoto);
     }
 }

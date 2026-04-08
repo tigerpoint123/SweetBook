@@ -153,7 +153,7 @@ export async function postBookContents(
   });
 }
 
-/** 기본 표지 템플릿 UID — 백엔드 `SweetbookCoverDefaults`와 동일 */
+/** 기본 표지 템플릿 UID — 백엔드 `sweetbook.cover.template-uid` / `SWEETBOOK_COVER_TEMPLATE_UID` 기본값과 동일 */
 export const SWEETBOOK_DEFAULT_COVER_TEMPLATE_UID = "1Es0DP4oARn8";
 
 export type UploadBookCoverResponse = {
@@ -442,17 +442,16 @@ function localCoverUrlForBook(
   bookUid: string | null,
   localPhotos: LocalPhotoItem[]
 ): string | null {
-  if (!bookUid) return null;
-  const match = localPhotos
-    .filter((p) => p.bookUid === bookUid)
-    .sort((a, b) => a.id - b.id);
-  const first = match[0];
-  return first ? localPhotoAbsoluteUrl(first.fileUrl) : null;
+  // 표지는 "표지로 저장된 값" 또는 Sweetbook 원격 표지 URL만 사용합니다.
+  // 업로드된 사진(로컬 첫 장)을 자동 표지로 대체하지 않습니다.
+  void bookUid;
+  void localPhotos;
+  return null;
 }
 
 /**
  * Sweetbook 책 목록(JSON)을 표지 타일용으로 정규화합니다.
- * 원격 표지 URL이 없으면 같은 bookUid의 로컬 업로드 사진(가장 오래된 id)을 표지로 씁니다.
+ * 원격 표지 URL이 없으면 표지 없음(null)로 둡니다.
  */
 export function buildBookCoverRows(
   raw: unknown,

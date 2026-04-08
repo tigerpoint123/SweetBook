@@ -13,7 +13,5 @@ public record LocalPhotoItemResponse(
         String hash,
         boolean isDuplicate,
         String fileUrl,
-        boolean isSample,
-        Long price,
-        String originalUrl
+        Long price
 ) {}

@@ -31,9 +31,11 @@ public class LocalPhotoStorage {
             Files.createDirectories(originalDir);
             Path originalFile = originalDir.resolve(name);
             Files.write(originalFile, bytes);
-            String op = originalFile.toAbsolutePath().toString().replace('\\', '/');
-            log.info("로컬 사진 저장 original={}", op);
-            return new SavedPaths(op);
+            Path uploadRoot = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path abs = originalFile.toAbsolutePath().normalize();
+            String rel = uploadRoot.relativize(abs).toString().replace('\\', '/');
+            log.info("로컬 사진 저장 absolute={} relative={}", abs, rel);
+            return new SavedPaths(rel);
         } catch (IOException e) {
             throw new UncheckedIOException("로컬 사진 저장 실패 bookUid=" + bookUid, e);
         }
@@ -51,8 +53,8 @@ public class LocalPhotoStorage {
         if (storedPath == null || storedPath.isBlank()) {
             return;
         }
-        Path path = Paths.get(storedPath).normalize().toAbsolutePath();
         Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = resolveStoredPath(storedPath, root);
         if (!path.startsWith(root) || !Files.isRegularFile(path)) {
             log.warn("로컬 사진 삭제 스킵(경로 불일치 또는 없음) path={}", storedPath);
             return;
@@ -63,5 +65,14 @@ public class LocalPhotoStorage {
         } catch (IOException e) {
             throw new UncheckedIOException("로컬 사진 파일 삭제 실패 path=" + storedPath, e);
         }
+    }
+
+    /** DB에 절대 경로로 남아 있는 기존 행과 상대 경로 행 모두 지원. */
+    public static Path resolveStoredPath(String storedPath, Path uploadRootAbsolute) {
+        Path p = Paths.get(storedPath);
+        if (p.isAbsolute()) {
+            return p.normalize();
+        }
+        return uploadRootAbsolute.resolve(storedPath).normalize().toAbsolutePath();
     }
 }

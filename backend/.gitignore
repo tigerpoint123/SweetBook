@@ -35,10 +35,10 @@ out/
 
 ### VS Code ###
 .vscode/
-.env
+.env*
+!.env.example
 
 ### Local uploaded photos (upload-dir) ###
-uploads/
 
 ### H2 file DB (application.yml: jdbc:h2:file:./data/testdb) ###
 data/

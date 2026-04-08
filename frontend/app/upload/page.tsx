@@ -20,7 +20,8 @@ function UploadPageContent() {
 
   useEffect(() => {
     if (!readLoggedIn()) {
-      router.replace("/login");
+      const next = `/upload${window.location.search}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
     }
   }, [router]);
 

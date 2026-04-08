@@ -15,9 +15,6 @@ public interface PhotoService {
 
     List<LocalPhotoItemResponse> listSelectedForBook(String bookUid, Optional<Long> viewerMemberId);
 
-    /** 해당 북에서 id 오름차순 상위 3장만 {@code is_sample=true}, 나머지 false로 맞춥니다. */
-    void recomputeSampleFlagsForBook(String bookUid);
-
     /** 이번에 채택한 photoIds를 순서대로 추가(기존 selected_photo 행은 유지) */
     void appendBookSelection(String bookUid, List<Long> photoIds);
 

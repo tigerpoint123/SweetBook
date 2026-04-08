@@ -16,7 +16,7 @@ spring:
       path: /h2-console
   jpa:
     hibernate:
-      ddl-auto: update   
+      ddl-auto: create
     show-sql: true
     properties:
       hibernate:
@@ -29,6 +29,8 @@ sweetbook:
   contents:
     template-uid: ${SWEETBOOK_CONTENTS_TEMPLATE_UID}
     break-before: ${SWEETBOOK_CONTENTS_BREAK_BEFORE}
+  cover:
+    template-uid: ${SWEETBOOK_COVER_TEMPLATE_UID}
 
 # 업로드 이미지 로컬 저장 (프로젝트 기준 상대 경로)
 app:

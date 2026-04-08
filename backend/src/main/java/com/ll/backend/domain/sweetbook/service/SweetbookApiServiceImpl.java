@@ -202,13 +202,11 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                 .ifPresent(bookCoverRepository::delete);
         try {
             localPhotoStorage.deleteIfUnderUploadRoot(photo.getLocalPath());
-            localPhotoStorage.deleteIfUnderUploadRoot(photo.getBlurLocalPath());
         } catch (Exception e) {
             log.warn("로컬 사진 파일 삭제 중 오류 bookUid={} photoId={}", bookUid, photo.getId(), e);
         }
         selectedPhotoRepository.deleteByPhotoId(photo.getId());
         photoRepository.delete(photo);
-        photoService.recomputeSampleFlagsForBook(bookUid);
         return response;
     }
 
@@ -272,7 +270,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
 
     private void persistPhotoAfterUpload(String bookUid, PhotoUploadOutcome outcome) {
         SweetbookApiEnvelope<PhotoUploadData> env = outcome.envelope();
-        if (outcome.originalLocalPath() == null
+        if (outcome.originalRelativePath() == null
                 || env == null
                 || !env.success()
                 || env.data() == null) {
@@ -282,8 +280,7 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
         Photo saved =
                 photoRepository.save(
                         Photo.builder()
-                                .localPath(outcome.originalLocalPath())
-                                .blurLocalPath(null)
+                                .localPath(outcome.originalRelativePath())
                                 .originalName(d.originalName())
                                 .sweetbookFileName(d.fileName())
                                 .bookUid(bookUid)
@@ -292,10 +289,6 @@ public class SweetbookApiServiceImpl implements SweetbookApiService {
                                 .uploadedAt(d.uploadedAt())
                                 .hash(d.hash())
                                 .isDuplicate(d.isDuplicate())
-                                .sample(false)
                                 .build());
-        saved.assignApiUrlsIfBlank();
-        photoRepository.save(saved);
-        photoService.recomputeSampleFlagsForBook(bookUid);
     }
 }

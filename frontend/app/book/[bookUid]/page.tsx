@@ -32,6 +32,29 @@ import {
   type UploadBookCoverResponse,
 } from "@/lib/sweetbook-api";
 
+type ApiErrorBody = {
+  message?: string;
+  errors?: string[];
+};
+
+function resolvePhotoSelectFailureMessage(rawText: string, status: number): string {
+  let detail = rawText || `요청 실패 (${status})`;
+  try {
+    const j = JSON.parse(rawText) as ApiErrorBody;
+    const firstError = Array.isArray(j.errors)
+      ? j.errors.find((v) => typeof v === "string" && v.trim())
+      : null;
+    if (firstError?.includes("표지를 먼저 추가")) {
+      return "표지 선택 먼저 해주세요.";
+    }
+    if (j?.message) detail = j.message;
+    if (firstError && !j?.message) detail = firstError;
+  } catch {
+    /* keep detail */
+  }
+  return detail;
+}
+
 export default function BookGalleryPage() {
   const params = useParams();
   const bookUid = typeof params.bookUid === "string" ? params.bookUid : "";
@@ -381,13 +404,7 @@ export default function BookGalleryPage() {
         });
         const text = await res.text();
         if (!res.ok) {
-          let detail = text || `요청 실패 (${res.status})`;
-          try {
-            const j = JSON.parse(text) as { message?: string };
-            if (j?.message) detail = j.message;
-          } catch {
-            /* keep detail */
-          }
+          const detail = resolvePhotoSelectFailureMessage(text, res.status);
           setPhotoSelectMessage(
             photos.length > 1
               ? `${i + 1}번째 사진(${photos[i]}) 콘텐츠 추가 실패: ${detail}`
@@ -595,6 +612,17 @@ export default function BookGalleryPage() {
         ? purchasePagePath
         : `/login?next=${encodeURIComponent(purchasePagePath)}`;
 
+  const uploadPagePath =
+    bookUid.trim() === ""
+      ? ""
+      : `/upload?bookUid=${encodeURIComponent(bookUid.trim())}`;
+  const uploadButtonHref =
+    uploadPagePath === ""
+      ? "/login"
+      : loggedIn
+        ? uploadPagePath
+        : `/login?next=${encodeURIComponent(uploadPagePath)}`;
+
   const bookDisplayPriceWon = useMemo(() => {
     for (const p of localPhotos) {
       const v = p.price;
@@ -669,9 +697,9 @@ export default function BookGalleryPage() {
         <h1 className="mb-1 font-mono text-sm text-zinc-500">{bookUid || "—"}</h1>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-lg font-semibold">책 사진 목록</p>
-          {ownerMayEditPhotos && bookUid.trim() !== "" ? (
+          {bookUid.trim() !== "" ? (
             <Link
-              href={`/upload?bookUid=${encodeURIComponent(bookUid.trim())}`}
+              href={uploadButtonHref}
               className="inline-flex w-fit shrink-0 items-center rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               사진 업로드

@@ -23,12 +23,8 @@ public class Photo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 원본 파일 절대 경로 ({@code .../bookUid/original/...}) */
+    /** 원본 파일 경로. 업로드 루트({@code app.photo.upload-dir}) 기준 상대 경로(슬래시). 기존 절대 경로 행도 호환. */
     private String localPath;
-
-    /** 과거 블러 복제본 경로(더 이상 생성하지 않음, 기존 행 호환용). */
-    @Column(length = 2048)
-    private String blurLocalPath;
 
     private String originalName;
     private String sweetbookFileName;
@@ -40,20 +36,9 @@ public class Photo {
     private String hash;
     private boolean isDuplicate;
 
-    /** 결제·소유자 없이 최종화 책에서 원본 노출 대상(콘텐츠 추가 시 선정) */
-    @Column(name = "is_sample", nullable = false)
-    private boolean sample;
-
-    @Column(length = 512)
-    private String originalUrl;
-
-    @Column(length = 512)
-    private String blurUrl;
-
     @Builder
     public Photo(
             String localPath,
-            String blurLocalPath,
             String originalName,
             String sweetbookFileName,
             String bookUid,
@@ -62,11 +47,11 @@ public class Photo {
             Instant uploadedAt,
             String hash,
             boolean isDuplicate,
-            Boolean sample,
-            String originalUrl,
-            String blurUrl) {
+            Object ignoredSample,
+            Object ignoredOriginalUrl,
+            Object ignoredBlurUrl,
+            Object ignoredBlurLocalPath) {
         this.localPath = localPath;
-        this.blurLocalPath = blurLocalPath;
         this.originalName = originalName;
         this.sweetbookFileName = sweetbookFileName;
         this.bookUid = bookUid;
@@ -75,17 +60,5 @@ public class Photo {
         this.uploadedAt = uploadedAt;
         this.hash = hash;
         this.isDuplicate = isDuplicate;
-        this.sample = sample != null && sample;
-        this.originalUrl = originalUrl;
-        this.blurUrl = blurUrl;
-    }
-
-    public void assignApiUrlsIfBlank() {
-        if (this.id == null) {
-            return;
-        }
-        if (this.originalUrl == null || this.originalUrl.isBlank()) {
-            this.originalUrl = "/api/photos/" + this.id + "/file";
-        }
     }
 }
