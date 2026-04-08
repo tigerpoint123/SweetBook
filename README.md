@@ -15,26 +15,29 @@
 #### 환경 변수 설정
 
 ```bash
+cd backend
 cp .env.example .env
 ```
+아래 환경변수 값 입력
+
 .env 파일 입력값 : 
    - SWEETBOOK_API_KEY= api 키 값
    - SWEETBOOK_ENV=sandbox
-   - SWEETBOOK_CONTENTS_TEMPLATE_UID= 구글 포토북 A 표지지
-   - SWEETBOOK_COVER_TEMPLATE_UID= 구글 포토북 A 내지 data A
+   - SWEETBOOK_CONTENTS_TEMPLATE_UID= 구글 포토북 A 표지 템플릿 UID
+   - SWEETBOOK_COVER_TEMPLATE_UID= 구글 포토북 A 내지 data A 템플릿 UID
    - SWEETBOOK_CONTENTS_BREAK_BEFORE=page
    - SWEETBOOK_API_BASE_URL= sanbox url
 
 ---
 SWEETBOOK_ENV, SWEETBOOK_CONTENTS_BREAK_BEFORE는 위의 값 그대로 사용
 
-이후 BackendApplication 실행
+이후 BackendApplication 실행 > 더미 데이터 생성 시나리오 실행 
 
 ### 프론트엔드 (Next.js)
 
 #### 설치
-
 ```bash
+cd ..
 cd frontend
 npm install
 ```
