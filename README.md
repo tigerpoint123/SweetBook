@@ -101,8 +101,8 @@ npm run dev
 
 | AI 도구 | 활용 내용용 |
 |------|------|
-| Claude Code | Sweetbook API 통신 환경 설계. 코드 리펙토링. 더미 데이터 시나리오 작성 | 
-| Gemini, ChatGPT | Sweetbook API 개발 문서 내용 학습 및 개념 질의 | 
+| GPT 5.4 | Sweetbook API 통신 환경 설계. 코드 리펙토링. 더미 데이터 시나리오 작성 | 
+| Gemini | Sweetbook API 개발 문서 내용 학습 및 개념 질의 | 
 
 
 ## 5. 설계 의도
